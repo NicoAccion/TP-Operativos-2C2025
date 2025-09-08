@@ -4,9 +4,9 @@
 t_config* query_tconfig;
 queryconfigs query_configs;
 
-int inicializar_configs(){
+int inicializar_configs(char* path_config){
     //Creo un config para query
-    query_tconfig = iniciar_config("query.config");
+    query_tconfig = iniciar_config(path_config);
     if (query_tconfig == NULL) {
         fprintf(stderr, "Error al cargar el archivo de configuración.\n");
         return EXIT_FAILURE;

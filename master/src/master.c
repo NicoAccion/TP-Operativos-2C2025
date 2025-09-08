@@ -1,20 +1,33 @@
-#include <utils/hello.h>
-#include "master-configs.h"
+#include "master.h"
 
 int main(int argc, char* argv[]) {
     saludar("master");
+
+    //Inicializo las configs de Master
     inicializar_configs();
-    int master_server = iniciar_servidor(int_a_string(master_configs.puertoescucha));
-    int master_cliente = esperar_cliente(master_server);
 
-    char* mensaje = recibir_mensaje(master_cliente);
-        if (mensaje != NULL) {
-        printf("Servidor recibió: %s\n", mensaje);
-        free(mensaje);
+    //Inicio el servidor
+    int master_server = iniciar_servidor(string_itoa(master_configs.puertoescucha));
+
+    //Espero la conexión de Query Control
+    int socket_querycontrol = esperar_cliente(master_server);
+
+    //Recibo el Path del query que me envió Query Control
+    char* path_query = recibir_mensaje(socket_querycontrol);
+        if (path_query != NULL) {
+        printf("Path del Query que recibí de Query Control: %s\n", path_query);
     }
-    enviar_mensaje("Hola desde el MASTER!", master_cliente);
 
-    close(master_cliente);
+    close(socket_querycontrol);
+
+    //Espero la conexión de Worker
+    int socket_worker = esperar_cliente(master_server);
+
+    //Envío el Path de la query que me pasó Query Control a Worker
+    printf("Envío a Worker el Path: %s\n", path_query);
+    enviar_mensaje(path_query, socket_worker);
+
+    close(socket_worker);
     close(master_server);
     return 0;
 }

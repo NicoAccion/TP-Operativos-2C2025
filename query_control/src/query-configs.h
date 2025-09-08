@@ -16,8 +16,7 @@ extern t_config* query_tconfig;
  * @param loglevel: Nivel de detalle máximo a mostrar en query
  * 
  * Esta estructura almacena la configuración necesaria para el
- * funcionamiento del query, incluyendo direcciones IP, puertos y
- * parámetros de reemplazo de caché y TLB.
+ * funcionamiento del query
  */
 typedef struct queryconfigs {
      char* ipmaster;
@@ -36,12 +35,13 @@ extern queryconfigs query_configs;
 
 /**
  * @brief Inicializa la configuración del query
+ * @param path_config el path del archivo
  * 
  * Esta función carga la configuración del query desde un archivo
  * de configuración y la almacena en la estructura global
  * `query_configs`.
  */
-int inicializar_configs();   
+int inicializar_configs(char* path_config);   
 
 /**
  * @brief Destruye el struct queryconfigs

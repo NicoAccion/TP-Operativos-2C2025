@@ -1,12 +1,5 @@
 #include "sockets.h"
 
-// Funciones auxiliares
-const char* int_a_string(int numero) {
-    static char buffer[6];
-    sprintf(buffer, "%d", numero);
-    return buffer;
-}
-
 /*/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
                                 Funciones de conexión

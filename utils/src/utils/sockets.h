@@ -59,11 +59,3 @@ void enviar_mensaje(const char* mensaje, int socket);
 * @return devuelve el mensaje recibido char*
 */
 char* recibir_mensaje(int socket);
-
-/**
-* @brief Convierte un int a string. Basicamente porque cargamos los puertos como int, pero para crear el socket
-* necesitamos un string.
-* @param numero el numero a convertir
-* @return devuelve el numero convertido a string
-*/
-const char* int_a_string(int numero);

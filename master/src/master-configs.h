@@ -17,8 +17,7 @@ extern t_config* master_tconfig;
  * @param loglevel: Nivel de detalle máximo a mostrar en master
  * 
  * Esta estructura almacena la configuración necesaria para el
- * funcionamiento del master, incluyendo direcciones IP, puertos y
- * parámetros de reemplazo de caché y TLB.
+ * funcionamiento del master
  */
 typedef struct masterconfigs {
      int puertoescucha;
