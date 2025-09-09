@@ -28,5 +28,22 @@ int main(int argc, char* argv[]) {
     }
 
     close(socket_master);
+
+    //Creo la conexión con Storage
+    int socket_storage = crear_conexion(worker_configs.ipstorage, string_itoa(worker_configs.puertostorage));
+    printf("Me conecté con Storage\n");
+
+    //Solicito el tamaño del bloque a Storage
+    printf("Solicito a Storage el tamaño del bloque\n");
+    enviar_mensaje("Pasame el tamaño del bloque", socket_storage);
+
+    //Recibo el tamaño solicitado
+    char* tam_bloque = recibir_mensaje(socket_master);
+    if (tam_bloque != NULL) {
+        printf("Tamaño del bloque que recibí de Storage: %s\n", tam_bloque);
+    }
+
+    close(socket_storage);
+
     return 0;
 }

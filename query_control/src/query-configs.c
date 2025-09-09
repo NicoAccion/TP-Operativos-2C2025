@@ -5,14 +5,17 @@ t_config* query_tconfig;
 queryconfigs query_configs;
 
 int inicializar_configs(char* path_config){
+
     //Creo un config para query
     query_tconfig = iniciar_config(path_config);
     if (query_tconfig == NULL) {
         fprintf(stderr, "Error al cargar el archivo de configuración.\n");
         return EXIT_FAILURE;
     }
+
     //Creo el struct donde voy a cargar los datos
     queryconfigs configcargado;
+    
     //Cargo los datos usando las funciones del util de configs.
     configcargado.ipmaster = cargar_variable_string(query_tconfig, "IP_MASTER");
     configcargado.puertomaster = cargar_variable_int(query_tconfig, "PUERTO_MASTER");

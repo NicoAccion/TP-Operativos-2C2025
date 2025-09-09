@@ -5,14 +5,17 @@ t_config* master_tconfig;
 masterconfigs master_configs;
 
 int inicializar_configs(){
+
     //Creo un config para master
     master_tconfig = iniciar_config("master.config");
     if (master_tconfig == NULL) {
         fprintf(stderr, "Error al cargar el archivo de configuración.\n");
         return EXIT_FAILURE;
     }
+
     //Creo el struct donde voy a cargar los datos
     masterconfigs configcargado;
+    
     //Cargo los datos en el, usando las funciones del util de configs.
     configcargado.puertoescucha = cargar_variable_int(master_tconfig, "PUERTO_ESCUCHA");
     configcargado.algoritmoplanificacion = cargar_variable_string(master_tconfig, "ALGORITMO_PLANIFICACION");

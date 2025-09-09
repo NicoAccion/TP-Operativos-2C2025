@@ -2,6 +2,7 @@
     "files.associations": {
         "cstdlib": "c",
         "string.h": "c",
-        "worker-configs.h": "c"
+        "worker-configs.h": "c",
+        "storage.h": "c"
     }
 }

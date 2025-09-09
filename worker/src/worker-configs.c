@@ -5,14 +5,17 @@ t_config* worker_tconfig;
 workerconfigs worker_configs;
 
 int inicializar_configs(char* path_config){
+    
     //Creo un config para worker
     worker_tconfig = iniciar_config(path_config);
     if (worker_tconfig == NULL) {
         fprintf(stderr, "Error al cargar el archivo de configuración.\n");
         return EXIT_FAILURE;
     }
+
     //Creo el struct donde voy a cargar los datos
     workerconfigs configcargado;
+
     //Cargo los datos usando las funciones del util de configs.
     configcargado.ipmaster = cargar_variable_string(worker_tconfig, "IP_MASTER");
     configcargado.puertomaster = cargar_variable_int(worker_tconfig, "PUERTO_MASTER");
