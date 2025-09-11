@@ -6,6 +6,9 @@ int main(int argc, char* argv[]) {
     //Inicializo las configs de Master
     inicializar_configs();
 
+    //Inicializo el logger
+    inicializar_logger_master(master_configs.loglevel);
+
     //Inicio el servidor
     int master_server = iniciar_servidor(string_itoa(master_configs.puertoescucha));
 

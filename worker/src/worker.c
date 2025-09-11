@@ -17,6 +17,9 @@ int main(int argc, char* argv[]) {
     //Inicializo las configs de Worker
     inicializar_configs(path_config);
 
+    //Inicializo el logger
+    inicializar_logger_worker(worker_configs.loglevel);
+
     //Creo la conexión con Master
     int socket_master = crear_conexion(worker_configs.ipmaster, string_itoa(worker_configs.puertomaster));
     printf("Me conecté con Master\n");

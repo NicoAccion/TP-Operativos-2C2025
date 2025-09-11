@@ -4,6 +4,7 @@
         "string.h": "c",
         "worker-configs.h": "c",
         "storage.h": "c",
-        "storage-configs.h": "c"
+        "storage-configs.h": "c",
+        "hello.h": "c"
     }
 }

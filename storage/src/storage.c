@@ -9,6 +9,9 @@ int main(int argc, char* argv[]) {
     //Inicializo las configs del archivo superblock.config
     inicializar_superblock_configs();
 
+    //Inicializo el logger
+    inicializar_logger_storage(storage_configs.loglevel);
+
     //Inicio el servidor
     int storage_server = iniciar_servidor(string_itoa(storage_configs.puertoescucha));
 

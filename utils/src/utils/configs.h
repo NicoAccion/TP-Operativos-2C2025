@@ -1,8 +1,6 @@
 #ifndef UTILS_CONFIGS_H_
 #define UTILS_CONFIGS_H_
 
-//considerar renombrar este archivo para no confundir con config.h
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <commons/log.h>

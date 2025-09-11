@@ -5,6 +5,7 @@
 
 #include <utils/hello.h>
 #include "storage-configs.h"
+#include "storage-log.h"
 
 
 #endif

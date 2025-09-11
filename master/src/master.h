@@ -5,6 +5,7 @@
 
 #include <utils/hello.h>
 #include "master-configs.h"
+#include "master-log.h"
 
 
 #endif

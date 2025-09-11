@@ -5,6 +5,7 @@
 
 #include <utils/hello.h>
 #include "worker-configs.h"
+#include "worker-log.h"
 
 
 #endif

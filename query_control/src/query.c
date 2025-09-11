@@ -18,6 +18,9 @@ int main(int argc, char* argv[]) {
     //Inicializo las configs de Query Control
     inicializar_configs(path_config);
 
+    //Inicializo el logger
+    inicializar_logger_query(query_configs.loglevel);
+
     //Creo la conexión con Master
     int socket_master = crear_conexion(query_configs.ipmaster, string_itoa(query_configs.puertomaster));
     printf("Me conecté con Master\n");

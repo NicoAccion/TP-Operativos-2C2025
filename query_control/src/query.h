@@ -5,6 +5,7 @@
 
 #include <utils/hello.h>
 #include "query-configs.h"
+#include "query-log.h"
 
 
 #endif
