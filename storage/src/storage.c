@@ -3,8 +3,11 @@
 int main(int argc, char* argv[]) {
     saludar("storage");
 
-    //Inicializo las configs de Master
+    //Inicializo las configs de Storage
     inicializar_configs();
+
+    //Inicializo las configs del archivo superblock.config
+    inicializar_superblock_configs();
 
     //Inicio el servidor
     int storage_server = iniciar_servidor(string_itoa(storage_configs.puertoescucha));
@@ -19,8 +22,8 @@ int main(int argc, char* argv[]) {
     }
 
     //Envío el tamaño solicitado a Worker
-    printf("Envío a Worker el tamaño del bloque: %s\n", "Qué te importa");
-    enviar_mensaje("Qué te importa", socket_worker);
+    printf("Envío a Worker el tamaño del bloque: %d\n", superblock_configs.blocksize);
+    enviar_mensaje(string_itoa(superblock_configs.blocksize), socket_worker);
 
     return 0;
 }

@@ -31,6 +31,8 @@ int inicializar_configs(){
 
 void destruir_configs() {
     //Libero memoria
+    free(master_configs.algoritmoplanificacion);
+    free(master_configs.loglevel);
 
     //Destruyo el config
     config_destroy(master_tconfig);

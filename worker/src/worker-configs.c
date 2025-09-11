@@ -36,6 +36,11 @@ int inicializar_configs(char* path_config){
 
 void destruir_configs() {
     //Libero memoria
+    free(worker_configs.ipmaster);
+    free(worker_configs.ipstorage);
+    free(worker_configs.algoritmoreemplazo);
+    free(worker_configs.pathqueries);
+    free(worker_configs.loglevel);
 
     //Destruyo el config
     config_destroy(worker_tconfig);

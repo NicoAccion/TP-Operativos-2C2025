@@ -30,6 +30,8 @@ int inicializar_configs(char* path_config){
 
 void destruir_configs() {
     //Libero memoria
+    free(query_configs.ipmaster);
+    free(query_configs.loglevel);
 
     //Destruyo el config
     config_destroy(query_tconfig);
