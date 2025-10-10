@@ -6,6 +6,9 @@
 #include <commons/log.h>
 #include <commons/config.h>
 
+#include <string.h>
+#include <stdbool.h>
+
 /**
 * @brief Carga el archivo config del modulo
 * @param path el path del archivo
@@ -40,5 +43,11 @@ char* cargar_variable_string(t_config* config, char* nombre);
 */
 
 double cargar_variable_double(t_config* config, char* nombre);
+
+/**
+ * @brief Carga una variable booleana de la configuración.
+ * Asume que 'TRUE' o 'true' representa el valor verdadero.
+ */
+bool cargar_variable_bool(t_config* config, char* nombre);
 
 #endif

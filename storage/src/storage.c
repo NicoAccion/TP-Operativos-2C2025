@@ -1,13 +1,22 @@
 #include "storage.h"
 
 int main(int argc, char* argv[]) {
-    saludar("storage");
+
+    //Valido que se haya pasado el path del archivo config
+    if (argc != 2) {
+        fprintf(stderr, "Uso: %s [archivo_config]\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+    char* path_config = argv[1];
 
     //Inicializo las configs de Storage
-    inicializar_configs();
+    inicializar_configs(path_config);
 
     //Inicializo las configs del archivo superblock.config
     inicializar_superblock_configs();
+
+    //Configuro los directorios
+    inicializar_directorios();
 
     //Inicializo el logger
     inicializar_logger_storage(storage_configs.loglevel);

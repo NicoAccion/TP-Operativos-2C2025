@@ -14,10 +14,10 @@ superblockconfigs superblock_configs;
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
 
-int inicializar_configs(){
+int inicializar_configs(char* path){
 
     //Creo un config para storage
-    storage_tconfig = iniciar_config("storage.config");
+    storage_tconfig = iniciar_config(path);
     if (storage_tconfig == NULL) {
         fprintf(stderr, "Error al cargar el archivo de configuración.\n");
         return EXIT_FAILURE;
@@ -28,7 +28,7 @@ int inicializar_configs(){
 
     //Cargo los datos usando las funciones del util de configs.
     configcargado.puertoescucha = cargar_variable_int(storage_tconfig, "PUERTO_ESCUCHA");
-    configcargado.freshstart = cargar_variable_int(storage_tconfig, "FRESH_START");  //Esto tendría que ser bool pero en las commons no hay get_bool_value
+    configcargado.freshstart = cargar_variable_bool(storage_tconfig, "FRESH_START");  //Esto tendría que ser bool pero en las commons no hay get_bool_value
     configcargado.puntomontaje = cargar_variable_string(storage_tconfig, "PUNTO_MONTAJE");
     configcargado.retardooperacion = cargar_variable_int(storage_tconfig, "RETARDO_OPERACION");
     configcargado.retardoaccesobloque = cargar_variable_int(storage_tconfig, "RETARDO_ACCESO_BLOQUE");
