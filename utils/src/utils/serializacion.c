@@ -243,3 +243,12 @@ t_query_completa* deserializar_query_completa(t_buffer* buffer){
     query_completa->estado = buffer_read_uint32(buffer);
     return query_completa;
 }
+
+void destruir_operacion_query(t_operacion_query* op) {
+    if (op == NULL) return;
+
+    free(op->informacion);
+    free(op->file);
+    free(op->tag);
+    free(op);
+}

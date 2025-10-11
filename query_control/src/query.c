@@ -68,17 +68,20 @@ void escuchar_master(int socket_master) {
                 log_info(logger_query, "## READ recibido: File=%s:%s -> Contenido=%s",
                          op->file, op->tag, op->informacion);
                 destruir_operacion_query(op);
+                liberar_paquete(paquete);
                 break;
 
             case END:
-                char* motivo = deserializar_string(paquete->buffer);
+                uint32_t len;
+                char* motivo = buffer_read_string(paquete->buffer, &len);
                 log_info(logger_query, "## Query finalizada: %s", motivo);
                 free(motivo);
-                destruir_paquete(paquete);
+                liberar_paquete(paquete);
                 return;
 
             default:
                 log_warning(logger_query,"## Código de operación desconocido recibido: %d",paquete->codigo_operacion);
+                liberar_paquete(paquete);
                 break;
         }
         }
