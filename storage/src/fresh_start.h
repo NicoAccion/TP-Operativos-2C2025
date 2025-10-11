@@ -1,9 +1,12 @@
+#ifndef STORAGE_FRESH_START_H
+#define STORAGE_FRESH_START_H
 
 #include <commons/string.h>
 #include <sys/stat.h>
 
 #include <utils/configs.h>
 #include "storage-configs.h"
+#include "fs_simulacion.h"
 
 /**
  * @brief Inicializa el FS en base a la config del archivo superblock.config
@@ -14,3 +17,5 @@ void inicializar_directorios();
 
 
 bool inicializar_initial_file();
+
+#endif 

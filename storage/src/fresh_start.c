@@ -1,5 +1,33 @@
 #include "fresh_start.h"
 
+bool inicializar_initial_file() {
+    
+    printf("\nInicializando archivos...\n");
+
+    // 1. Creo directorios
+    fs_crear_directorio("files/initial_file");
+    fs_crear_directorio("files/initial_file/BASE");
+    
+    // 2. Creo metadata inicial
+    metadataconfigs* metadata_inicial = malloc(sizeof(metadataconfigs));
+    metadata_inicial->tamanio = 128;
+    metadata_inicial->estado = "WORK_IN_PROGRESS";
+    metadata_inicial->blocks = list_create();
+
+    uint32_t* bloque0 = malloc(sizeof(uint32_t)); *bloque0 = 0;
+    list_add(metadata_inicial->blocks, bloque0);
+
+    // 3. Guardo la estructura en el archivo
+    guardar_metadata_en_archivo(metadata_inicial, "initial_file/BASE/metadata.config");
+
+    // 4. Liberar toda la memoria al final
+    list_destroy_and_destroy_elements(metadata_inicial->blocks, free);
+    free(metadata_inicial);
+
+    return true;
+}
+
+
 void borrar_datos_existentes() {
     printf("Iniciando limpieza de persistencia...\n");
 
@@ -34,7 +62,7 @@ void borrar_datos_existentes() {
        
         // ... Lógica de creación y logs ...
         if (mkdir(ruta_completa, 0777) == 0) {
-            printf("Directorio creado exitosamente: %s\n", ruta_completa);
+            printf("Directorio creado exitosamente: '%s'\n", ruta_completa);
         } else {
             printf("Hubo un error creando el directorio: %s\n", ruta_completa);
         }
@@ -45,10 +73,11 @@ void borrar_datos_existentes() {
 
 
 void inicializar_directorios(){
-    // Si es un fresh start borro todo lo que hay en storage
+    // Si es un fresh start borro todo lo que hay en el puntomontaje
     if(storage_configs.freshstart){
         printf("Modo de inicio: FRESH START\n");
         borrar_datos_existentes();
+        inicializar_initial_file();
         return;
     }
 

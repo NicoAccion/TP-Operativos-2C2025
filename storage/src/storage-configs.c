@@ -28,7 +28,7 @@ int inicializar_configs(char* path){
 
     //Cargo los datos usando las funciones del util de configs.
     configcargado.puertoescucha = cargar_variable_int(storage_tconfig, "PUERTO_ESCUCHA");
-    configcargado.freshstart = cargar_variable_bool(storage_tconfig, "FRESH_START");  //Esto tendría que ser bool pero en las commons no hay get_bool_value
+    configcargado.freshstart = cargar_variable_bool(storage_tconfig, "FRESH_START");
     configcargado.puntomontaje = cargar_variable_string(storage_tconfig, "PUNTO_MONTAJE");
     configcargado.retardooperacion = cargar_variable_int(storage_tconfig, "RETARDO_OPERACION");
     configcargado.retardoaccesobloque = cargar_variable_int(storage_tconfig, "RETARDO_ACCESO_BLOQUE");
@@ -89,4 +89,62 @@ void destruir_superblock_configs() {
     //Destruyo el config
     config_destroy(superblock_tconfig);
     fprintf(stderr, "Archivo de configuración de superblock.config destruido.\n");
+}
+
+/*/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+                        Funciones de las configs del archivo metadata.config
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
+
+
+char* convertir_lista_a_string(t_list* lista) {
+    char* string_bloques = string_new();
+    string_append(&string_bloques, "[");
+
+    for (int i = 0; i < list_size(lista); i++) {
+        uint32_t* bloque_ptr = list_get(lista, i);
+        char* numero_str = string_itoa((int)*bloque_ptr);
+
+        string_append(&string_bloques, numero_str);
+        
+        if (i < list_size(lista) - 1) {
+            string_append(&string_bloques, ",");
+        }
+        free(numero_str);
+    }
+    
+    string_append(&string_bloques, "]");
+    return string_bloques;
+}
+
+void guardar_metadata_en_archivo(metadataconfigs* metadata, char* path) {
+     // 1. Armo la ruta absoluta.
+    char ruta_absoluta[1024];
+    snprintf(ruta_absoluta, 
+             sizeof(ruta_absoluta), 
+             "%s/files/%s", 
+             storage_configs.puntomontaje, 
+             path);
+    
+    t_config* config = malloc(sizeof(t_config));
+    config->path = strdup(ruta_absoluta);
+    config->properties = dictionary_create();
+
+    // 2. Convertimos cada campo del struct a string y lo agregamos al config
+    char* tamanio_str = string_itoa(metadata->tamanio);
+    char* bloques_str = convertir_lista_a_string(metadata->blocks);
+
+    config_set_value(config, "TAMANIO", tamanio_str);
+    config_set_value(config, "ESTADO", metadata->estado);
+    config_set_value(config, "BLOQUES", bloques_str);
+
+    // 3. Guardamos la configuración en el archivo. Esto lo crea si no existe.
+    config_save_in_file(config, ruta_absoluta);
+    printf("INFO: Metadata guardada correctamente en '%s'\n", ruta_absoluta);
+
+    // 4. Liberamos toda la memoria temporal que usamos
+    free(tamanio_str);
+    free(bloques_str);
+    config_destroy(config);
 }
