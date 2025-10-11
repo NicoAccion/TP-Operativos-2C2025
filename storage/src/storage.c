@@ -43,6 +43,7 @@ char path_hashindex[MAX_PATH];
 char path_physical[MAX_PATH];
 char path_files[MAX_PATH];
 
+
 // ===================== FUNCIONES AUXILIARES =====================
 void inicializar_logger_storage(char* nivel_log) {
     t_log_level level = log_level_from_string(nivel_log);
@@ -81,6 +82,8 @@ void log_file_truncado(int query_id, char* file, char* tag, int tamanio) {
 void log_tag_creado(int query_id, char* file, char* tag) {
     log_info(logger_storage, "##%d - Tag creado %s:%s", query_id, file, tag);
 }
+
+
 
 void log_tag_commit(int query_id, char* file, char* tag) {
     log_info(logger_storage, "##%d - Commit de File:Tag %s:%s", query_id, file, tag);
@@ -899,7 +902,14 @@ int main(int argc, char* argv[]){
         return EXIT_FAILURE;
     }
 
-    
+    //Inicializo el logger
+inicializar_logger_storage(storage_configs.loglevel);
+
+//Configuro el FS segun config
+inicializar_fs();
+
+//Inicio el servidor
+int storage_server = iniciar_servidor(string_itoa(storage_configs.puertoescucha));
 
     leer_config_storage(argv[1], &storage_cfg);
 

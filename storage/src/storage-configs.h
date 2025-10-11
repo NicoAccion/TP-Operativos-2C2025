@@ -1,8 +1,9 @@
 #ifndef STORAGE_CONFIGS_H
 #define STORAGE_CONFIGS_H
 
+#include <sys/stat.h>
 #include <commons/string.h>
-
+#include <commons/collections/list.h>
 #include <utils/configs.h>
 #include <utils/sockets.h>
 #include <utils/hello.h>
@@ -57,7 +58,7 @@ extern storageconfigs storage_configs;
  * de configuración y la almacena en la estructura global
  * `storage_configs`.
  */
-int inicializar_configs();   
+int inicializar_configs(char* path);   
 
 /**
  * @brief Destruye el struct storageconfigs
@@ -110,5 +111,56 @@ int inicializar_superblock_configs();
  * 
  */
 void destruir_superblock_configs();
+
+/*/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+                        Funciones de las configs del archivo metadata.config
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
+
+/**
+ * @struct metadataconfigs
+ * @brief Estructura que contiene la configuración de los archivos tipo metadata.config
+ * 
+ * @param tamanio
+ * @param blocks
+ * @param estado
+ */
+typedef struct metadataconfigs {
+    int tamanio;
+    t_list* blocks;
+    char* estado;
+} metadataconfigs;
+
+
+/**
+ * @brief Inicializa la configuración del archivo metadata.config
+ * 
+ * Esta función carga la configuración del archivo metadata.config
+ */
+metadataconfigs* inicializar_metadata_config();
+
+/**
+ * @brief Destruye el struct metadataconfigs
+ * 
+ * Destruye el struct metadataconfigs y libera la memoria
+ * 
+ */
+void destruir_metadata_configs(metadataconfigs* metadata_config);
+
+
+/**
+ * @brief Convierte una t_list de números (uint32_t*) a un string como "[1,2,3]".
+ * @param lista La lista de bloques.
+ * @return Un nuevo string que debes liberar con free().
+ */
+char* convertir_lista_a_string(t_list* lista);
+
+/**
+ * @brief Guarda la información de un struct metadataconfigs en un archivo de configuración.
+ * @param metadata Puntero al struct con la información.
+ * @param path Ruta del archivo donde se guardará la configuración.
+ */
+void guardar_metadata_en_archivo(metadataconfigs* metadata, char* path);
 
 #endif
