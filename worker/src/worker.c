@@ -28,23 +28,35 @@ void ejecutar_instruccion(const char* instruccion, int query_id, int pc, int soc
     // --- LOG: Query a ejecutar ---
     printf("## Query %d: - Instrucción realizada: %s\n", query_id, instruccion);
 
-    // Simular comportamiento según instrucción
     if (strncmp(instruccion, "READ", 4) == 0) {
-        // Enviar lectura al Master
-        char mensaje[256];
-        snprintf(mensaje, sizeof(mensaje), "READ|Query:%d|Instruccion:%s", query_id, instruccion);
-        enviar_mensaje(mensaje, socket_master);
-        // --- LOG: Query enviada a Master ---
-        log_info(logger_worker, "## Query %d: Resultado de lectura enviado al Master", query_id);
-    }
+        // Serializamos una operación READ
+        t_operacion_query op = {
+            .file = strdup("file1.txt"),
+            .tag = strdup("campo1"),
+            .informacion = strdup(instruccion)
+        };
 
-    if (strncmp(instruccion, "END", 3) == 0) {
-        // Avisar fin de Query al Master
-        char mensaje[64];
-        snprintf(mensaje, sizeof(mensaje), "END|Query:%d", query_id);
-        enviar_mensaje(mensaje, socket_master);
-        // --- LOG: Query finalizada ---
+        t_buffer* buffer = serializar_operacion_query(&op);
+        t_paquete* paquete = empaquetar_buffer(READ, buffer);
+        enviar_paquete(socket_master, paquete);
+
+        destruir_operacion_query(&op);
+        destruir_paquete(paquete);
+
+        log_info(logger_worker, "## Query %d: Resultado de READ enviado al Master", query_id);
+    }
+    else if (strncmp(instruccion, "END", 3) == 0) {
+        // Enviamos un END con motivo
+        char* motivo = "Ejecución finalizada correctamente";
+        t_buffer* buffer = serializar_string(motivo);
+        t_paquete* paquete = empaquetar_buffer(END, buffer);
+        enviar_paquete(socket_master, paquete);
+        destruir_paquete(paquete);
+
         log_info(logger_worker, "## Query %d: Finalizada ejecución (END)", query_id);
+    }
+    else {
+        log_info(logger_worker, "## Query %d: Instrucción ejecutada: %s", query_id, instruccion);
     }
 }
 
@@ -52,27 +64,23 @@ void ejecutar_instruccion(const char* instruccion, int query_id, int pc, int soc
 void ejecutar_query(const char* path_query, int socket_master, int socket_storage, int query_id) {
     FILE* archivo = fopen(path_query, "r");
     if (!archivo) {
-        // --- LOG: No se pudo abrir el archivo ---
         log_error(logger_worker, "❌ No se pudo abrir el archivo de Query: %s", path_query);
         return;
     }
 
-    // --- LOG: Query recibida ---
-    log_info(logger_worker, "## Query %d: Se recibe la Query. Path de operaciones: %s", query_id, path_query);
+    log_info(logger_worker, "## Query %d: Path de operaciones: %s", query_id, path_query);
 
     char linea[256];
     int pc = 0;
 
     while (fgets(linea, sizeof(linea), archivo)) {
-        // Eliminar salto de línea
         linea[strcspn(linea, "\r\n")] = 0;
-        if (strlen(linea) == 0) continue; // Ignorar líneas vacías
+        if (strlen(linea) == 0) continue;
 
         ejecutar_instruccion(linea, query_id, pc, socket_master);
 
-        if (strncmp(linea, "END", 3) == 0) {
-            break; // Terminar ejecución
-        }
+        if (strncmp(linea, "END", 3) == 0)
+            break;
 
         pc++;
     }
@@ -81,114 +89,94 @@ void ejecutar_query(const char* path_query, int socket_master, int socket_storag
 }
 
 int main(int argc, char* argv[]) {
-
-    // Validar argumentos
     if (argc != 3) {
-        fprintf(stderr, "Uso: %s [archivo_config] [ID worker]\n", argv[0]);
+        fprintf(stderr, "Uso: %s [archivo_config] [ID_worker]\n", argv[0]);
         return EXIT_FAILURE;
     }
 
     char* path_config = argv[1];
     uint32_t id_worker = atoi(argv[2]);
 
-    saludar("worker");
-
-    // Inicializo configuración y logger
     inicializar_configs(path_config);
     inicializar_logger_worker(worker_configs.loglevel);
 
-    // --- LOG: Worker iniciado ---
-    log_info(logger_worker, "## Worker %s inicializado con loglevel %d", id_worker, worker_configs.loglevel);
+    log_info(logger_worker, "## Worker %d inicializado", id_worker);
 
-    // Conexión con Storage
-    // =============================
-    int socket_storage = crear_conexion(worker_configs.ipstorage, string_itoa(worker_configs.puertostorage));
+    // ===== Conexión con Storage =====
+    int socket_storage = crear_conexion(worker_configs.ipstorage,
+                                        string_itoa(worker_configs.puertostorage));
     if (socket_storage < 0) {
-        fprintf(stderr, "Error al conectar con Storage\n");
+        log_error(logger_worker, "Error al conectar con Storage");
         return EXIT_FAILURE;
     }
 
-    // --- LOG: Storage conectado ---
-    log_info(logger_worker, "Conectado a Storage (%s:%d)", worker_configs.ipstorage, worker_configs.puertostorage);
+    log_info(logger_worker, "Conectado a Storage (%s:%d)",
+             worker_configs.ipstorage, worker_configs.puertostorage);
 
-    // Handshake con Storage: solicitar tamaño de bloque
-    enviar_mensaje("HANDSHAKE_WORKER", socket_storage);
+    // Handshake con Storage
+    t_buffer* buffer_hs = serializar_string("WORKER");
+    t_paquete* paquete_hs = empaquetar_buffer(HANDSHAKE_WORKER, buffer_hs);
+    enviar_paquete(socket_storage, paquete_hs);
+    destruir_paquete(paquete_hs);
 
-    char* tam_bloque = recibir_mensaje(socket_storage);
-    if (tam_bloque != NULL) {
-        // --- LOG: Bloque recibido ---
-        log_info(logger_worker, "Tamaño de bloque recibido de Storage: %s bytes", tam_bloque);
-        worker_configs.tamanio_bloque = atoi(tam_bloque);
-        free(tam_bloque);
+    // Esperar tamaño de bloque (respuesta)
+    t_paquete* paquete_resp = recibir_paquete(socket_storage);
+    if (paquete_resp && paquete_resp->codigo_operacion == TAMANIO_BLOQUE) {
+        worker_configs.tamanio_bloque = deserializar_int(paquete_resp->buffer);
+        log_info(logger_worker, "Tamaño de bloque recibido: %d bytes", worker_configs.tamanio_bloque);
+        destruir_paquete(paquete_resp);
     } else {
-        // --- LOG: Error al recibir bloque ---
-        log_error(logger_worker, "Error al recibir tamaño de bloque de Storage");
+        log_error(logger_worker, "Error al recibir tamaño de bloque");
         close(socket_storage);
         return EXIT_FAILURE;
     }
-
-    inicializar_memoria(worker_configs.tammemoria, atoi(tam_bloque));
-
-
-    // Conexión con Master
-    int socket_master = crear_conexion(worker_configs.ipmaster, string_itoa(worker_configs.puertomaster));
-    if (socket_master < 0) {
-        // --- LOG: Error al conectar con Master ---
-        log_error(logger_worker, "Error al conectar con Master (%s:%d)", worker_configs.ipmaster, worker_configs.puertomaster);
-        close(socket_storage);
-        return EXIT_FAILURE;
-    }
-
-    // --- LOG: Master conectado ---
-    log_info(logger_worker, "Conectado a Master (%s:%d)", worker_configs.ipmaster, worker_configs.puertomaster);
-
-    // Enviar ID del Worker al Master
-    enviar_mensaje(id_worker, socket_master);
 
     inicializar_memoria(worker_configs.tammemoria, worker_configs.tamanio_bloque);
 
-    // Esperar path del Query desde Master
-
-
-    //Serializo el id del Worker
-    t_buffer* buffer = serializar_worker(id_worker);
-    t_paquete* paquete = empaquetar_buffer(PAQUETE_WORKER, buffer);
-
-    //Se lo envío a Master
-    enviar_paquete(socket_master, paquete);
-    printf("Envio un paquete");
-
-    //Recibo el Path del query que me envía el Master
-
-    char* path_query = recibir_mensaje(socket_master);
-    if (path_query != NULL) {
-
-        // --- LOG: Query recibida---
-        log_info(logger_worker, "Query recibida: %s", path_query);
-
-        int query_id = atoi(id_worker); // Por ahora usamos el ID del worker como query_id simulado
-        ejecutar_query(path_query, socket_master, socket_storage, query_id);
-
-        free(path_query);
-    } else {
-        // --- LOG: Error al recibir Query ---
-        log_error(logger_worker, "Error al recibir Query del Master");
+    // ===== Conexión con Master =====
+    int socket_master = crear_conexion(worker_configs.ipmaster,
+                                       string_itoa(worker_configs.puertomaster));
+    if (socket_master < 0) {
+        log_error(logger_worker, "Error al conectar con Master");
+        close(socket_storage);
+        return EXIT_FAILURE;
     }
 
-    ejecutar_query(path_query, socket_master, socket_storage, id_worker);
+    log_info(logger_worker, "Conectado a Master (%s:%d)",
+             worker_configs.ipmaster, worker_configs.puertomaster);
 
+    // Handshake con Master
+    t_buffer* buffer_id = serializar_int(id_worker);
+    t_paquete* paquete_w = empaquetar_buffer(HANDSHAKE_WORKER, buffer_id);
+    enviar_paquete(socket_master, paquete_w);
+    destruir_paquete(paquete_w);
 
+    // ===== Esperar Query =====
+    t_paquete* paquete_query = recibir_paquete(socket_master);
+    if (!paquete_query) {
+        log_error(logger_worker, "Error al recibir Query desde Master");
+        close(socket_master);
+        close(socket_storage);
+        return EXIT_FAILURE;
+    }
+
+    if (paquete_query->codigo_operacion == PATH_QUERY) {
+        char* path_query = deserializar_string(paquete_query->buffer);
+        log_info(logger_worker, "Query recibida: %s", path_query);
+
+        ejecutar_query(path_query, socket_master, socket_storage, id_worker);
+        free(path_query);
+    } else {
+        log_warning(logger_worker, "Código inesperado de paquete desde Master: %d",
+                    paquete_query->codigo_operacion);
+    }
+
+    destruir_paquete(paquete_query);
 
     liberar_memoria();
-    
-
-
-    //    Cierre
-    // =============================
     close(socket_master);
     close(socket_storage);
 
-    // --- LOG: Worker finalizado ---
-    log_info(logger_worker, "Worker %s finalizado correctamente.", id_worker);
+    log_info(logger_worker, "Worker %d finalizado correctamente.", id_worker);
     return 0;
 }
