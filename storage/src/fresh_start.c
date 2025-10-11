@@ -181,3 +181,24 @@ void inicializar_fs(){
 
     printf("Modo de inicio: Normal\n");
 }
+
+void fs_crear_directorio(const char* dir_name) {
+    char path_completo[512];
+
+    // 1. Construimos la ruta completa de forma segura
+    snprintf(path_completo, sizeof(path_completo), "%s/%s", storage_configs.puntomontaje, dir_name);
+
+    // 2. Intentamos crear el directorio
+    int resultado = mkdir(path_completo, 0777);
+
+    if (resultado == 0) {
+        printf("Directorio creado exitosamente: '%s' \n", path_completo);
+    } else {
+        // Error: verificamos la causa
+        if (errno == EEXIST) {
+            printf("WARNING: El directorio '%s' ya existía.\n", path_completo);
+        } else {
+            fprintf(stderr, "ERROR: No se pudo crear el directorio '%s'. Motivo: %s\n", path_completo, strerror(errno));
+        }
+    }
+}
