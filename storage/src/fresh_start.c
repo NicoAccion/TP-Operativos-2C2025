@@ -71,6 +71,7 @@ void borrar_datos_existentes() {
 
     printf("Limpieza de directorios completada.\n");
 }
+
 void crear_blocks_fisicos(){
     uint32_t cantidad = superblock_configs.fssize / superblock_configs.blocksize;
     uint32_t tamanio = superblock_configs.blocksize;
@@ -114,7 +115,7 @@ void crear_bloque_logico_como_link(const char* path_tag, int nro_bloque_fisico, 
              path_tag, 
              nro_bloque_logico);
 
-    printf("INFO: Creando hard link desde '%s' hacia '%s'\n", ruta_fisica, ruta_logica);
+    printf("\nCreando hard link desde '%s' hacia '%s'\n", ruta_fisica, ruta_logica);
 
     // 3. Crear el hard link
     // La función link() crea un nuevo nombre (ruta_logica) que apunta
@@ -124,15 +125,14 @@ void crear_bloque_logico_como_link(const char* path_tag, int nro_bloque_fisico, 
         exit(EXIT_FAILURE);
     }
 
-    printf("ÉXITO: Bloque lógico %06d.dat creado como vínculo al bloque físico %d.\n", nro_bloque_logico, nro_bloque_fisico);
+    printf("ÉXITO: Bloque lógico %06d.dat creado como vínculo al bloque físico %d.\n\n", nro_bloque_logico, nro_bloque_fisico);
 }
 
 void crear_archivo_bitmap() {
     uint32_t cantidad_bloques = superblock_configs.fssize / superblock_configs.blocksize;
-    char ruta_bitmap[1024];
+    char ruta_bitmap[256];
     snprintf(ruta_bitmap, sizeof(ruta_bitmap), "%s/bitmap.bin", storage_configs.puntomontaje);
 
-    // Abrimos en modo "write binary" (wb)
     FILE* f_bitmap = fopen(ruta_bitmap, "wb");
     if (f_bitmap == NULL) {
         perror("ERROR FATAL: No se pudo crear el bitmap.bin");
@@ -169,7 +169,7 @@ void crear_archivo_hash_index() {
 void inicializar_fs(){
     // Si es un fresh start borro todo lo que hay en el puntomontaje
     if(storage_configs.freshstart){
-        printf("Modo de inicio: FRESH START\n");
+        printf("\nModo de inicio: FRESH START\n");
         borrar_datos_existentes();
         crear_blocks_fisicos();
         crear_archivo_bitmap();

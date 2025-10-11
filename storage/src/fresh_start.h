@@ -30,6 +30,6 @@ void crear_blocks_fisicos();
  * @param nro_bloque_fisico El número del bloque físico al cual vincular (ej: 0).
  * @param nro_bloque_logico El nombre del archivo de bloque lógico (ej: 0 -> 000000.dat).
  */
-void crear_bloque_logico_como_link(const char* path_tag, int nro_bloque_fisico, int nro_bloque_logico)
+void crear_bloque_logico_como_link(const char* path_tag, int nro_bloque_fisico, int nro_bloque_logico);
 
 #endif 

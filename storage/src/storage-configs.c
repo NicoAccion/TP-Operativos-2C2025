@@ -120,7 +120,7 @@ char* convertir_lista_a_string(t_list* lista) {
 
 void guardar_metadata_en_archivo(metadataconfigs* metadata, char* path) {
      // 1. Armo la ruta absoluta.
-    char ruta_absoluta[1024];
+    char ruta_absoluta[256];
     snprintf(ruta_absoluta, 
              sizeof(ruta_absoluta), 
              "%s/files/%s", 
