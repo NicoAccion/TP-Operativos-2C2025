@@ -5,6 +5,14 @@
         "worker-configs.h": "c",
         "storage.h": "c",
         "storage-configs.h": "c",
-        "hello.h": "c"
+        "hello.h": "c",
+        "stdlib.h": "c",
+        "query-configs.h": "c",
+        "master-log.h": "c",
+        "queue.h": "c",
+        "atender-hilos.h": "c",
+        "master.h": "c",
+        "master-configs.h": "c",
+        "serializacion.h": "c"
     }
 }

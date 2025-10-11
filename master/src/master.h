@@ -4,8 +4,10 @@
 #include <commons/string.h>
 
 #include <utils/hello.h>
-#include "master-configs.h"
-#include "master-log.h"
 
+#include "master-configs.h"
+#include "planificacion.h"
+
+void* servidor_general();
 
 #endif

@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
     }
 
     char* path_config = argv[1];
-    char* id_worker = argv[2];
+    uint32_t id_worker = atoi(argv[2]);
 
     saludar("worker");
 
@@ -148,6 +148,18 @@ int main(int argc, char* argv[]) {
     inicializar_memoria(worker_configs.tammemoria, worker_configs.tamanio_bloque);
 
     // Esperar path del Query desde Master
+
+
+    //Serializo el id del Worker
+    t_buffer* buffer = serializar_worker(id_worker);
+    t_paquete* paquete = empaquetar_buffer(PAQUETE_WORKER, buffer);
+
+    //Se lo envío a Master
+    enviar_paquete(socket_master, paquete);
+    printf("Envio un paquete");
+
+    //Recibo el Path del query que me envía el Master
+
     char* path_query = recibir_mensaje(socket_master);
     if (path_query != NULL) {
 
