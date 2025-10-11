@@ -4,10 +4,10 @@
 t_config* master_tconfig;
 masterconfigs master_configs;
 
-int inicializar_configs(){
+int inicializar_configs(char* path_config){
 
     //Creo un config para master
-    master_tconfig = iniciar_config("master.config");
+    master_tconfig = iniciar_config(path_config);
     if (master_tconfig == NULL) {
         fprintf(stderr, "Error al cargar el archivo de configuración.\n");
         return EXIT_FAILURE;

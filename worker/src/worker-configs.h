@@ -47,12 +47,13 @@ extern workerconfigs worker_configs;
 
 /**
  * @brief Inicializa la configuración del worker
+ * @param path_config el path del archivo
  * 
  * Esta función carga la configuración del worker desde un archivo
  * de configuración y la almacena en la estructura global
  * `worker_configs`.
  */
-int inicializar_configs();   
+int inicializar_configs(char* path_config);   
 
 /**
  * @brief Destruye el struct workerconfigs
