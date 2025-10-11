@@ -78,8 +78,8 @@ void crear_blocks_fisicos(){
     printf("\nCreando %u archivos de bloque de %u bytes cada uno...\n", cantidad, tamanio);
     for (uint32_t i = 0; i < cantidad; i++) {
         char ruta_bloque[256];
-        // El formato "%05d" asegura los ceros a la izquierda (00000, 00001, etc.)
-        snprintf(ruta_bloque, sizeof(ruta_bloque), "%s/physical_blocks/block%05d.dat", storage_configs.puntomontaje, i);
+        // El formato "%04d" asegura los ceros a la izquierda (0000, 0001, etc.)
+        snprintf(ruta_bloque, sizeof(ruta_bloque), "%s/physical_blocks/block%04d.dat", storage_configs.puntomontaje, i);
 
         FILE* f_bloque = fopen(ruta_bloque, "w");
         if (f_bloque == NULL) {
@@ -98,6 +98,32 @@ void crear_blocks_fisicos(){
     printf("Archivos de bloque físicos creados.\n");    
 }
 
+void crear_blocks_logicos(char* path){
+    char ruta_completa[256];
+
+    snprintf(ruta_completa,
+             sizeof(ruta_completa),
+              "%s/%s/%s/logical_blocks/block%06d.dat",
+              storage_configs.puntomontaje,
+              "files",
+              path,
+              0);
+
+    FILE* f_bloque = fopen(ruta_completa, "w");
+    if (f_bloque == NULL) {
+        fprintf(stderr, "ERROR FATAL: No se pudo crear el archivo de bloque %s\n", ruta_completa);
+        exit(EXIT_FAILURE);
+    }
+
+    // ftruncate es la forma más eficiente de asignar un tamaño a un archivo vacío
+    if (ftruncate(fileno(f_bloque), superblock_configs.blocksize) != 0) {
+        fprintf(stderr, "ERROR FATAL: No se pudo asignar el tamaño al bloque %s\n", ruta_completa);
+        exit(EXIT_FAILURE);
+    }
+    fclose(f_bloque); 
+    printf("Archivos de bloque logicos creados.\n"); 
+}
+
 void inicializar_directorios(){
     // Si es un fresh start borro todo lo que hay en el puntomontaje
     if(storage_configs.freshstart){
@@ -105,6 +131,7 @@ void inicializar_directorios(){
         borrar_datos_existentes();
         crear_blocks_fisicos();
         inicializar_initial_file();
+        crear_blocks_logicos("initial_file/BASE");
         return;
     }
 
