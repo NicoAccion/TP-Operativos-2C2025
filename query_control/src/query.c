@@ -22,33 +22,90 @@ int main(int argc, char* argv[]) {
     inicializar_logger_query(query_configs.loglevel);
 
     //Creo la conexión con Master
-    int socket_master = crear_conexion(query_configs.ipmaster, string_itoa(query_configs.puertomaster));
+    char* puerto = string_itoa(query_configs.puertomaster);
+    int socket_master = crear_conexion(query_configs.ipmaster, puerto);
+    free(puerto);
+
     if (socket_master == -1) {
-        log_error(logger_query, "## Error al conectar con Master en IP: %s, Puerto: %d", query_configs.ipmaster, query_configs.puertomaster);
+        log_error(logger_query, "## Error al conectar con Master en IP: %s, Puerto: %d",
+                  query_configs.ipmaster, query_configs.puertomaster);
+        log_destroy(logger_query);
         return EXIT_FAILURE;
     }
-    
+
     // --- LOG: Conexión con Master ---
-    log_info(logger_query, "## Conexión al Master exitosa. IP: %s, Puerto: %d", query_configs.ipmaster, query_configs.puertomaster);
+    log_info(logger_query, "## Conexión al Master exitosa. IP: %s, Puerto: %d",
+             query_configs.ipmaster, query_configs.puertomaster);
 
+     // Concatenar path_query y prioridad en un solo string
+    // Envío de Query
+    char* mensaje_a_enviar = string_from_format("%s|%s", path_query, prioridad);
+    log_info(logger_query, "## Solicitud de ejecución de Query: %s, prioridad: %s",
+             path_query, prioridad);
 
-    //Envío a Master el path de la query
-    //printf("Envío a Master el Path de la query: %s\n", path_query);
+    if (enviar_mensaje(mensaje_a_enviar, socket_master) <= 0) {
+        log_error(logger_query, "## Error al enviar Query al Master.");
+        free(mensaje_a_enviar);
+        close(socket_master);
+        log_destroy(logger_query);
+        return EXIT_FAILURE;
+    }
+    free(mensaje_a_enviar);
+
     
-    // Concatenar path_query y prioridad en un solo string
-    char mensaje_a_enviar[256];
-    snprintf(mensaje_a_enviar, sizeof(mensaje_a_enviar), "%s|%s", path_query, prioridad);
 
-    log_info(logger_query, "## Solicitud de ejecución de Query: %s, prioridad: %s", path_query, prioridad);
-    enviar_mensaje(mensaje_a_enviar, socket_master);
-    
-    // --- Escuchar mensajes del Master ---
-    escuchar_master(socket_master); 
-    
-
-     // --- LOG: Finalización ---
-    log_info(logger_query, "## Query Finalizada - Ejecución completada exitosamente");
+    // Escuchar mensajes del Master
+    escuchar_master(socket_master);
 
     close(socket_master);
+    log_destroy(logger_query);
     return 0;
+}
+
+void escuchar_master(int socket_master) {
+    while (1) {
+        char* mensaje = recibir_mensaje(socket_master);
+        if (mensaje == NULL) {
+            log_error(logger_query, "## Conexión con Master perdida.");
+            break;
+        }
+
+        if (strncmp(mensaje, "READ", 4) == 0) {
+            char** partes = string_split(mensaje, "|");
+            char* file = NULL;
+            char* tag = NULL;
+            char* contenido = NULL;
+
+            for (int i = 0; partes[i] != NULL; i++) {
+                if (string_starts_with(partes[i], "File:"))
+                    file = partes[i] + strlen("File:");
+                else if (string_starts_with(partes[i], "Tag:"))
+                    tag = partes[i] + strlen("Tag:");
+                else if (string_starts_with(partes[i], "Contenido:"))
+                    contenido = partes[i] + strlen("Contenido:");
+            }
+
+            log_info(logger_query, "## Lectura realizada: File %s:%s, contenido: %s",
+                     file ? file : "?", tag ? tag : "?", contenido ? contenido : "?");
+
+            string_array_destroy(partes);
+        }
+
+        else if (strncmp(mensaje, "END", 3) == 0) {
+            char** partes = string_split(mensaje, "|");
+            char* motivo = partes[1] ? partes[1] : "Finalización desconocida";
+
+            log_info(logger_query, "## Query Finalizada - %s", motivo);
+
+            string_array_destroy(partes);
+            free(mensaje);
+            break;
+        }
+
+        else {
+            log_warning(logger_query, "## Mensaje desconocido recibido del Master: %s", mensaje);
+        }
+
+        free(mensaje);
+    }
 }
