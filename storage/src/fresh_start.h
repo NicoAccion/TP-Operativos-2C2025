@@ -32,4 +32,15 @@ void crear_blocks_fisicos();
  */
 void crear_bloque_logico_como_link(const char* path_tag, int nro_bloque_fisico, int nro_bloque_logico);
 
+/**
+ * @brief Crea un directorio en la ruta especificada.
+ *
+ * @param dir_name El nombre del nuevo directorio a crear.
+ *
+ * Esta función construye la ruta completa 'punto_montaje/dir_name' e intenta crearla.
+ * Si el directorio ya existe (error EEXIST), lo informa como una advertencia pero no
+ * falla. Para cualquier otro error, se registra como un error crítico.
+ */
+void fs_crear_directorio(const char* dir_name);
+
 #endif 
