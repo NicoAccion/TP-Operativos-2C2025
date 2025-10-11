@@ -141,7 +141,7 @@ void guardar_metadata_en_archivo(metadataconfigs* metadata, char* path) {
 
     // 3. Guardamos la configuración en el archivo. Esto lo crea si no existe.
     config_save_in_file(config, ruta_absoluta);
-    printf("INFO: Metadata guardada correctamente en '%s'\n", ruta_absoluta);
+    printf("Metadata guardada correctamente: '%s'\n", ruta_absoluta);
 
     // 4. Liberamos toda la memoria temporal que usamos
     free(tamanio_str);

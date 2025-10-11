@@ -16,6 +16,6 @@
 void inicializar_directorios();   
 
 
-bool inicializar_initial_file();
+void inicializar_initial_file();
 
 #endif 

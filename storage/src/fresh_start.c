@@ -1,6 +1,6 @@
 #include "fresh_start.h"
 
-bool inicializar_initial_file() {
+void inicializar_initial_file() {
     
     printf("\nInicializando archivos...\n");
 
@@ -24,12 +24,12 @@ bool inicializar_initial_file() {
     list_destroy_and_destroy_elements(metadata_inicial->blocks, free);
     free(metadata_inicial);
 
-    return true;
+    printf("Inicializacion de archivos completada.\n");
 }
 
 
 void borrar_datos_existentes() {
-    printf("Iniciando limpieza de persistencia...\n");
+    printf("\nIniciando limpieza de persistencia...\n");
 
     // Buffer para construir la ruta completa dinámicamente
     char ruta_completa[128]; 
@@ -68,7 +68,7 @@ void borrar_datos_existentes() {
         }
     }
 
-    printf("Limpieza y preparación de directorios completada.\n");
+    printf("Limpieza de directorios completada.\n");
 }
 
 
