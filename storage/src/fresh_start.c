@@ -98,40 +98,84 @@ void crear_blocks_fisicos(){
     printf("Archivos de bloque físicos creados.\n");    
 }
 
-void crear_blocks_logicos(char* path){
-    char ruta_completa[256];
+void crear_bloque_logico_como_link(const char* path_tag, int nro_bloque_fisico, int nro_bloque_logico) {
+    // 1. Construir la ruta al bloque FÍSICO (el origen del link)
+    char ruta_fisica[1024];
+    snprintf(ruta_fisica, sizeof(ruta_fisica), 
+             "%s/physical_blocks/block%04d.dat", 
+             storage_configs.puntomontaje, 
+             nro_bloque_fisico);
 
-    snprintf(ruta_completa,
-             sizeof(ruta_completa),
-              "%s/%s/%s/logical_blocks/block%06d.dat",
-              storage_configs.puntomontaje,
-              "files",
-              path,
-              0);
+    // 2. Construir la ruta al bloque LÓGICO (el destino del link)
+    char ruta_logica[1024];
+    snprintf(ruta_logica, sizeof(ruta_logica), 
+             "%s/%s/logical_blocks/%06d.dat", 
+             storage_configs.puntomontaje, 
+             path_tag, 
+             nro_bloque_logico);
 
-    FILE* f_bloque = fopen(ruta_completa, "w");
-    if (f_bloque == NULL) {
-        fprintf(stderr, "ERROR FATAL: No se pudo crear el archivo de bloque %s\n", ruta_completa);
+    printf("INFO: Creando hard link desde '%s' hacia '%s'\n", ruta_fisica, ruta_logica);
+
+    // 3. Crear el hard link
+    // La función link() crea un nuevo nombre (ruta_logica) que apunta
+    // a los mismos datos en disco que ruta_fisica.
+    if (link(ruta_fisica, ruta_logica) != 0) {
+        perror("ERROR FATAL: No se pudo crear el hard link del bloque lógico");
         exit(EXIT_FAILURE);
     }
 
-    // ftruncate es la forma más eficiente de asignar un tamaño a un archivo vacío
-    if (ftruncate(fileno(f_bloque), superblock_configs.blocksize) != 0) {
-        fprintf(stderr, "ERROR FATAL: No se pudo asignar el tamaño al bloque %s\n", ruta_completa);
-        exit(EXIT_FAILURE);
-    }
-    fclose(f_bloque); 
-    printf("Archivos de bloque logicos creados.\n"); 
+    printf("ÉXITO: Bloque lógico %06d.dat creado como vínculo al bloque físico %d.\n", nro_bloque_logico, nro_bloque_fisico);
 }
 
-void inicializar_directorios(){
+void crear_archivo_bitmap() {
+    uint32_t cantidad_bloques = superblock_configs.fssize / superblock_configs.blocksize;
+    char ruta_bitmap[1024];
+    snprintf(ruta_bitmap, sizeof(ruta_bitmap), "%s/bitmap.bin", storage_configs.puntomontaje);
+
+    // Abrimos en modo "write binary" (wb)
+    FILE* f_bitmap = fopen(ruta_bitmap, "wb");
+    if (f_bitmap == NULL) {
+        perror("ERROR FATAL: No se pudo crear el bitmap.bin");
+        exit(EXIT_FAILURE);
+    }
+
+    // Calculamos el tamaño del bitmap en bytes.
+    // (cantidad + 7) / 8 es un truco para redondear hacia arriba la división entera.
+    size_t tamanio_bitmap = (cantidad_bloques + 7) / 8;
+    printf("\nCreando bitmap.bin con un tamaño de %zu bytes para %u bloques.\n", tamanio_bitmap, cantidad_bloques);
+
+    // Lo inicializamos con todos los bits en 0 (todos los bloques libres)
+    for (size_t i = 0; i < tamanio_bitmap; i++) {
+        fputc('\0', f_bitmap);
+    }
+
+    fclose(f_bitmap);
+    printf("ÉXITO: Archivo bitmap.bin creado e inicializado.\n");
+}
+
+void crear_archivo_hash_index() {
+    char ruta_hash[256];
+    snprintf(ruta_hash, sizeof(ruta_hash), "%s/blocks_hash_index.config", storage_configs.puntomontaje);
+
+    FILE* f_hash = fopen(ruta_hash, "w");
+    if (f_hash == NULL) {
+        perror("ERROR FATAL: No se pudo crear el archivo de hash index");
+        exit(EXIT_FAILURE);
+    }
+    fclose(f_hash);
+    printf("ÉXITO: Archivo de hash index creado.\n");
+}
+
+void inicializar_fs(){
     // Si es un fresh start borro todo lo que hay en el puntomontaje
     if(storage_configs.freshstart){
         printf("Modo de inicio: FRESH START\n");
         borrar_datos_existentes();
         crear_blocks_fisicos();
+        crear_archivo_bitmap();
+        crear_archivo_hash_index();
         inicializar_initial_file();
-        crear_blocks_logicos("initial_file/BASE");
+        crear_bloque_logico_como_link("files/initial_file/BASE", 0, 0);
         return;
     }
 
