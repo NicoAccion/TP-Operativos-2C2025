@@ -26,8 +26,8 @@
  * @param END: Código de operación para enviar el fin de una query
  */
 typedef enum {
-    PAQUETE_QUERY = 1,
-    PAQUETE_WORKER = 2,
+    HANDSHAKE_QUERYCONTROL = 1,
+    HANDSHAKE_WORKER = 2,
     PAQUETE_QUERY_COMPLETA = 3,
     READ = 4,
     END = 5,

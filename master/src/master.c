@@ -10,19 +10,23 @@
 #include <time.h>
 #include <errno.h>
 
-#define MAX_CLIENTES 200
+#define MAX_WORKERS 200
+#define MAX_QUERY_CONTROLS 200
 #define MAX_QUERIES  200
 
-typedef enum { CLIENTE_QUERY_CONTROL, CLIENTE_WORKER } TipoCliente;
 typedef enum { READY, EXEC, EXIT } EstadoQuery;
 
 typedef struct {
     int socket;
-    TipoCliente tipo;
-    int id;          // Worker id (si es worker) o -1
+    int id;
     bool activo;
-    bool ocupado;    // solo para workers
-} Cliente;
+    bool ocupado;
+} Worker;
+
+typedef struct {
+    int socket;
+    bool activo;
+} QueryControl;
 
 typedef struct {
     int id;
@@ -37,13 +41,17 @@ typedef struct {
 
 // ==================== VARIABLES GLOBALES ====================
 
-Cliente clientes[MAX_CLIENTES];
+Worker workers[MAX_WORKERS];
+QueryControl query_controls[MAX_QUERY_CONTROLS];
 Query queries[MAX_QUERIES];
 
 int cantidad_workers = 0;
+int next_worker_id = 0;
+
+int cantidad_query_controls = 0;
+
 int cantidad_queries = 0;
 int next_query_id = 0;
-int next_worker_id = 0;
 
 pthread_mutex_t mutex_planificador = PTHREAD_MUTEX_INITIALIZER;
 
@@ -58,16 +66,26 @@ static long long ahora_ms() {
     return (long long)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
 }
 
-int encontrar_slot_cliente() {
-    for (int i = 0; i < MAX_CLIENTES; i++)
-        if (!clientes[i].activo) return i;
+int encontrar_slot_worker() {
+    for (int i = 0; i < MAX_WORKERS; i++) {
+        if (!workers[i].activo)
+            return i;
+    }
     return -1;
 }
 
-Cliente* buscar_worker_libre() {
-    for (int i = 0; i < MAX_CLIENTES; i++) {
-        if (clientes[i].activo && clientes[i].tipo == CLIENTE_WORKER && !clientes[i].ocupado)
-            return &clientes[i];
+int encontrar_slot_query_control() {
+    for (int i = 0; i < MAX_QUERY_CONTROLS; i++) {
+        if (!query_controls[i].activo)
+            return i;
+    }
+    return -1;
+}
+
+Worker* buscar_worker_libre() {
+    for (int i = 0; i < MAX_WORKERS; i++) {
+        if (workers[i].activo && !workers[i].ocupado)
+            return &workers[i];
     }
     return NULL;
 }
@@ -100,115 +118,125 @@ Query* buscar_query_por_id(int id) {
     return &queries[id];
 }
 
-Cliente* buscar_cliente_por_socket(int sock) {
-    for (int i = 0; i < MAX_CLIENTES; i++)
-        if (clientes[i].activo && clientes[i].socket == sock)
-            return &clientes[i];
+Worker* buscar_worker_por_socket(int socket) {
+    for (int i = 0; i < MAX_WORKERS; i++) {
+        if (workers[i].activo && workers[i].socket == socket)
+            return &workers[i];
+    }
+    return NULL;
+}
+
+QueryControl* buscar_query_control_por_socket(int socket) {
+    for (int i = 0; i < MAX_QUERY_CONTROLS; i++) {
+        if (query_controls[i].activo && query_controls[i].socket == socket)
+            return &query_controls[i];
+    }
     return NULL;
 }
 
 // ==================== REGISTRO / ELIMINACIÓN ====================
 
 void registrar_worker(int socket) {
-    int slot = encontrar_slot_cliente();
-    if (slot == -1) {
-        printf("No hay slots para más clientes\n");
-        close(socket);
-        return;
-    }
-
-    clientes[slot].activo = true;
-    clientes[slot].socket = socket;
-    clientes[slot].tipo = CLIENTE_WORKER;
-    clientes[slot].id = next_worker_id++;
-    clientes[slot].ocupado = false;
-    cantidad_workers++;
-
-    // --- LOG: Registrar Worker ---
-    log_info(logger_master, "## Se conecta el Worker %d - Total Workers: %d",
-             clientes[slot].id, cantidad_workers);
-}
-
-void registrar_querycontrol(int socket) {
-    char* mensaje = recibir_mensaje(socket);
-    if (!mensaje) {
-        printf("Error al recibir mensaje del Query Control\n");
-        return;
-    }
-
-    char** partes = string_split(mensaje, "|");
-    char* path_query = partes[0] ? strdup(partes[0]) : strdup("UNKNOWN");
-    int prioridad = (partes[1] != NULL) ? atoi(partes[1]) : 5;
-
-    int qid = next_query_id++;
-    Query* q = &queries[qid];
-    q->id = qid;
-    q->socket_query = socket;
-    q->socket_worker = -1;
-    strncpy(q->archivo_query, path_query, sizeof(q->archivo_query) - 1);
-    q->archivo_query[sizeof(q->archivo_query) - 1] = '\0';
-    q->prioridad = prioridad;
-    q->estado = READY;
-    q->program_counter = 0;
-    q->timestamp_entrada = ahora_ms();
-    cantidad_queries++;
-
-    // --- LOG: Registrar QueryControl ---
-    log_info(logger_master,
-        "## Nuevo QueryControl: Query %s, prioridad %d, id %d (Workers: %d)",
-        q->archivo_query, q->prioridad, q->id, cantidad_workers);
-
-    free(path_query);
-    free(mensaje);
-    string_array_destroy(partes);
-}
-
-void eliminar_cliente_y_cancelar_query(int socket) {
-    Cliente* c = buscar_cliente_por_socket(socket);
-    if (!c) {
-        close(socket);
-        return;
-    }
-
-    if (c->tipo == CLIENTE_WORKER) {
-        Query* q = buscar_query_por_socket_worker(socket);
-        if (q) {
-            q->estado = EXIT;
-            enviar_mensaje("END|Error: Worker desconectado", q->socket_query);
-            // --- LOG: Desconexión de Worker con query terminada ---
-            log_info(logger_master,
-                     "## Worker %d desconectado - Query %d finalizada",
-                     c->id, q->id);
-        } else {
-            // --- LOG: Desconexión de Worker sin query ---
-            log_info(logger_master,
-                     "## Worker %d desconectado (sin query asignada)", c->id);
+    int slot = -1;
+    for (int i = 0; i < MAX_WORKERS; i++) {
+        if (!workers[i].activo) {
+            slot = i;
+            break;
         }
-        cantidad_workers--;
+    }
+    if (slot == -1) {
+        printf("No hay espacio para más workers\n");
+        close(socket);
+        return;
+    }
+
+    workers[slot].socket = socket;
+    workers[slot].activo = true;
+    workers[slot].ocupado = false;
+    workers[slot].id = next_worker_id++;
+
+    cantidad_workers++;
+    log_info(logger_master, "## Se conecta el Worker %d - Total Workers: %d",
+             workers[slot].id, cantidad_workers);
+}
+
+void registrar_query_control(int socket) {
+    int slot = -1;
+    for (int i = 0; i < MAX_QUERY_CONTROLS; i++) {
+        if (!query_controls[i].activo) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot == -1) {
+        printf("No hay espacio para más Query Controls\n");
+        close(socket);
+        return;
+    }
+
+    query_controls[slot].socket = socket;
+    query_controls[slot].activo = true;
+    cantidad_query_controls++;
+
+    log_info(logger_master, "## Se conecta un Query Control - Total: %d", cantidad_query_controls);
+}
+
+void eliminar_worker_y_cancelar_query(int socket) {
+    Worker* w = buscar_worker_por_socket(socket);
+    if (!w) {
+        close(socket);
+        return;
+    }
+
+    Query* q = buscar_query_por_socket_worker(socket);
+    if (q) {
+        q->estado = EXIT;
+        enviar_mensaje("END|Error: Worker desconectado", q->socket_query);
+
+        // --- LOG ---
+        log_info(logger_master,
+                 "## Worker %d desconectado - Query %d finalizada",
+                 w->id, q->id);
     } else {
-        for (int i = 0; i < next_query_id; i++) {
-            if (queries[i].id == i && queries[i].socket_query == socket) {
-                if (queries[i].estado == READY) {
-                    queries[i].estado = EXIT;
-                    // --- LOG: Desconexión de QueryControl con query cancelada ---
-                    log_info(logger_master,
-                        "## QueryControl desconectado - Query %d (READY) cancelada",
-                        queries[i].id);
-                } else if (queries[i].estado == EXEC) {
-                    int sock_worker = queries[i].socket_worker;
-                    if (sock_worker != -1) enviar_mensaje("PREEMPT", sock_worker);
-                    // --- LOG: Desconexión de QueryControl por desalojo de query ---
-                    log_info(logger_master,
-                        "## QueryControl desconectado - Desalojo de Query %d solicitado",
-                        queries[i].id);
-                }
+        // --- LOG ---
+        log_info(logger_master,
+                 "## Worker %d desconectado (sin query asignada)", w->id);
+    }
+
+    close(w->socket);
+    w->activo = false;
+    w->ocupado = false;
+    cantidad_workers--;
+}
+
+void eliminar_querycontrol_y_cancelar_query(int socket) {
+    QueryControl* qc = buscar_query_control_por_socket(socket);
+    if (!qc) {
+        close(socket);
+        return;
+    }
+
+    for (int i = 0; i < next_query_id; i++) {
+        if (queries[i].id == i && queries[i].socket_query == socket) {
+            if (queries[i].estado == READY) {
+                queries[i].estado = EXIT;
+                log_info(logger_master,
+                         "## QueryControl desconectado - Query %d (READY) cancelada",
+                         queries[i].id);
+            } else if (queries[i].estado == EXEC) {
+                int sock_worker = queries[i].socket_worker;
+                if (sock_worker != -1)
+                    enviar_mensaje("PREEMPT", sock_worker);
+
+                log_info(logger_master,
+                         "## QueryControl desconectado - Desalojo de Query %d solicitado",
+                         queries[i].id);
             }
         }
     }
 
-    close(c->socket);
-    c->activo = false;
-    c->ocupado = false;
+    close(qc->socket);
+    qc->activo = false;
 }
 
 // ==================== PLANIFICADOR ====================
@@ -255,8 +283,10 @@ void* planificador_prioridades(void* arg) {
     while (1) {
         pthread_mutex_lock(&mutex_planificador);
 
-        Cliente* w = buscar_worker_libre();
+        Worker* w = buscar_worker_libre();
         Query* mejor = seleccionar_mejor_ready();
+
+        // --- Caso 1: hay query lista y worker libre ---
         if (mejor && w) {
             enviar_query_a_worker(mejor, w);
             pthread_mutex_unlock(&mutex_planificador);
@@ -264,17 +294,20 @@ void* planificador_prioridades(void* arg) {
             continue;
         }
 
+        // --- Caso 2: no hay worker libre → posible desalojo por prioridad ---
         if (!w) {
             Query* ready_mejor = seleccionar_mejor_ready();
             Query* exec_peor = buscar_exec_de_menor_prioridad();
+
             if (ready_mejor && exec_peor && ready_mejor->prioridad < exec_peor->prioridad) {
                 int sock_worker = exec_peor->socket_worker;
-                Cliente* cw = buscar_cliente_por_socket(sock_worker);
+                Worker* cw = buscar_worker_por_socket(sock_worker);
                 if (cw) {
-                    // --- LOG: Desalojo de query/worker por prioridad ---
+                    // --- LOG ---
                     log_info(logger_master,
-                        "## Desalojo: Query %d (%d) del Worker %d por prioridad",
-                        exec_peor->id, exec_peor->prioridad, cw->id);
+                        "## Desalojo: Query %d (prioridad %d) del Worker %d por prioridad superior (%d)",
+                        exec_peor->id, exec_peor->prioridad, cw->id, ready_mejor->prioridad);
+
                     enviar_mensaje("PREEMPT", sock_worker);
                 }
             }
@@ -283,6 +316,7 @@ void* planificador_prioridades(void* arg) {
         pthread_mutex_unlock(&mutex_planificador);
         usleep(200 * 1000);
     }
+
     return NULL;
 }
 
@@ -325,19 +359,21 @@ int main(int argc, char* argv[]) {
     //Cargo el archivo config en una variable
     char* path_config = argv[1];
 
-    saludar("master");
-    inicializar_configs();
-
     //Inicializo las configs de Master
     inicializar_configs(path_config);
 
     //Inicializo el logger
-
     inicializar_logger_master(master_configs.loglevel);
+
     // --- LOG: Master iniciado ---
     log_info(logger_master, "## Master inicializado (nivel log %d)", master_configs.loglevel);
 
-    int server_fd = iniciar_servidor(string_itoa(master_configs.puertoescucha));
+    
+    // Iniciar servidor: preparar puerto como cadena si iniciar_servidor lo necesita
+    char* puerto_str = string_itoa(master_configs.puertoescucha);
+    int server_fd = iniciar_servidor(puerto_str);
+    free(puerto_str);
+    
     if (server_fd < 0) {
         // --- LOG: Error al iniciar Master ---
         log_error(logger_master, "Error al iniciar servidor en puerto %d", master_configs.puertoescucha);
@@ -347,167 +383,208 @@ int main(int argc, char* argv[]) {
     // --- LOG: Master escuchando... ---
     log_info(logger_master, "## Master escuchando en puerto %d", master_configs.puertoescucha);
 
-    for (int i = 0; i < MAX_CLIENTES; i++) clientes[i].activo = false;
-    for (int i = 0; i < MAX_QUERIES; i++) queries[i].id = -1;
+    // Inicializo listas de Workers y QueryControls
+    for (int i = 0; i < MAX_WORKERS; i++) {
+        workers[i].activo = false;
+        workers[i].socket = -1;
+        workers[i].ocupado = false;
+        workers[i].id = -1;
+    }
 
+    for (int i = 0; i < MAX_QUERY_CONTROLS; i++) {
+        querycontrols[i].activo = false;
+        querycontrols[i].socket = -1;
+        querycontrols[i].id = -1;
+    }
+    for (int i = 0; i < MAX_QUERIES; i++) {
+        queries[i].id = -1;
+        queries[i].socket_query = -1;
+        queries[i].socket_worker = -1;
+    }
+
+    // Lanzar hilos: planificador y aging
+    pthread_t th_planificador, th_aging;
+    if (pthread_create(&th_planificador, NULL, planificador_prioridades, NULL) != 0) {
+        log_error(logger_master, "Error al crear hilo planificador: %s", strerror(errno));
+        close(server_fd);
+        return EXIT_FAILURE;
+    }
+    // sólo lanzar aging si corresponde
+    if (master_configs.tiempo_aging > 0) {
+        if (pthread_create(&th_aging, NULL, hilo_aging, NULL) != 0) {
+            log_error(logger_master, "Error al crear hilo de aging: %s", strerror(errno));
+            // no es fatal: continuar sin aging o decide salir
+        }
+    }
+    
+    // Preparar select()
     fd_set master_set, read_fds;
     int fdmax = server_fd;
     FD_ZERO(&master_set);
     FD_SET(server_fd, &master_set);
 
-    pthread_t th_plan, th_aging;
-    pthread_create(&th_plan, NULL, planificador_prioridades, NULL);
-    if (master_configs.tiempo_aging > 0)
-        pthread_create(&th_aging, NULL, hilo_aging, NULL);
-
+    // Bucle principal: accept + mensajes
     while (1) {
         read_fds = master_set;
-        if (select(fdmax + 1, &read_fds, NULL, NULL, NULL) == -1) {
+        int ready_count = select(fdmax + 1, &read_fds, NULL, NULL, NULL);
+        if (ready_count == -1) {
             if (errno == EINTR) continue;
-            perror("select");
+            log_error(logger_master, "select() falló: %s", strerror(errno));
             break;
         }
 
-        for (int i = 0; i <= fdmax; i++) {
-            if (!FD_ISSET(i, &read_fds)) continue;
+        for (int fd = 0; fd <= fdmax && ready_count > 0; ++fd) {
+            if (!FD_ISSET(fd, &read_fds)) continue;
+            ready_count--;
 
-            if (i == server_fd) {
+            // ==== NUEVA CONEXIÓN ====
+            if (fd == server_fd) {
                 int nuevo_socket = esperar_cliente(server_fd);
                 if (nuevo_socket <= 0) continue;
 
+
+                // Agregar a master_set y actualizar fdmax
                 FD_SET(nuevo_socket, &master_set);
                 if (nuevo_socket > fdmax) fdmax = nuevo_socket;
 
-                char* tipo = recibir_mensaje(nuevo_socket);
-                if (!tipo) {
+                // Recibir handshake inicial: tipo de cliente
+                t_paquete* handshake = recibir_paquete(nuevo_socket);
+                if (!handshake) {
                     close(nuevo_socket);
                     FD_CLR(nuevo_socket, &master_set);
                     continue;
                 }
 
-                if (strcmp(tipo, "WORKER") == 0)
+                if (handshake->codigo_operacion == HANDSHAKE_WORKER) {
                     registrar_worker(nuevo_socket);
-                else
+                    log_info(logger_master, "Se conectó un Worker (socket %d)", nuevo_socket);
+                }
+                else if (handshake->codigo_operacion == HANDSHAKE_QUERYCONTROL) {
                     registrar_querycontrol(nuevo_socket);
-
-                free(tipo);
-            } else {
-                char* mensaje = recibir_mensaje(i);
-                if (!mensaje) {
-                    pthread_mutex_lock(&mutex_planificador);
-                    eliminar_cliente_y_cancelar_query(i);
-                    pthread_mutex_unlock(&mutex_planificador);
-                    FD_CLR(i, &master_set);
-                    continue;
+                    log_info(logger_master, "Se conectó un QueryControl (socket %d)", nuevo_socket);
+                }
+                else {
+                    log_warning(logger_master, "Handshake desconocido en socket %d", nuevo_socket);
+                    close(nuevo_socket);
+                    FD_CLR(nuevo_socket, &master_set);
                 }
 
-                Cliente* c = buscar_cliente_por_socket(i);
-                if (!c) {
-                    free(mensaje);
-                    close(i);
-                    FD_CLR(i, &master_set);
-                    continue;
-                }
-
-                if (c->tipo == CLIENTE_WORKER) {
-                    if (strncmp(mensaje, "READ|", 5) == 0) {
-                        pthread_mutex_lock(&mutex_planificador);
-                        Query* q = buscar_query_por_socket_worker(i);
-                        if (q)
-                            enviar_mensaje(mensaje, q->socket_query);
-                        pthread_mutex_unlock(&mutex_planificador);
-                    } else if (strncmp(mensaje, "END|", 4) == 0) {
-                        pthread_mutex_lock(&mutex_planificador);
-                        Query* q = buscar_query_por_socket_worker(i);
-                        if (q) {
-                            enviar_mensaje(mensaje, q->socket_query);
-                            q->estado = EXIT;
-                            q->socket_worker = -1;
-                            c->ocupado = false;
-                        }
-                        pthread_mutex_unlock(&mutex_planificador);
-                    } else if (strncmp(mensaje, "PC|", 3) == 0) {
-                        int pc = atoi(mensaje + 3);
-                        pthread_mutex_lock(&mutex_planificador);
-                        Query* q = buscar_query_por_socket_worker(i);
-                        if (q) {
-                            q->program_counter = pc;
-                            q->socket_worker = -1;
-                            q->estado = READY;
-                            q->timestamp_entrada = ahora_ms();
-                            c->ocupado = false;
-                            // --- LOG: Desalojo de query/worker por prioridad ---
-                            log_info(logger_master,
-                                "## Se desaloja Query %d (%d) del Worker %d - PRIORIDAD (PC=%d)",
-                                q->id, q->prioridad, c->id, pc);
-                        } else {
-                            // --- LOG: PC sin query asociada ---
-                            log_warning(logger_master,
-                                "## PC recibido sin Query asociada al Worker %d", c->id);
-                        }
-                        pthread_mutex_unlock(&mutex_planificador);
-                    } else {
-                        // --- LOG: Mensaje no esperado ---
-                        log_debug(logger_master,
-                            "## Mensaje desconocido desde Worker %d: %s", c->id, mensaje);
-                    }
-                } else { // Query Control
-                    if (strncmp(mensaje, "CANCEL|", 7) == 0) {
-                        int qid = atoi(mensaje + 7);
-                        pthread_mutex_lock(&mutex_planificador);
-                        Query* q = buscar_query_por_id(qid);
-                        if (q) {
-                            if (q->estado == READY) {
-                                q->estado = EXIT;
-                                // --- LOG: Query cancelada ---
-                                log_info(logger_master, "## Query %d cancelada (READY)", qid);
-                            } else if (q->estado == EXEC && q->socket_worker != -1) {
-                                enviar_mensaje("PREEMPT", q->socket_worker);
-                                // --- LOG: Cancelar Query ---
-                                log_info(logger_master,
-                                    "## Se solicita cancelación de Query %d en ejecución", qid);
-                            }
-                        }
-                        pthread_mutex_unlock(&mutex_planificador);
-                    } else {
-                        // --- LOG: Mensaje del QueryControl ---
-                        log_debug(logger_master,
-                            "## Mensaje desde Query Control socket %d: %s", i, mensaje);
-                    }
-                }
-
-                free(mensaje);
+                destruir_paquete(handshake);
+                continue;
             }
+            
+            // ==== CLIENTE YA CONECTADO ====
+            t_paquete* paquete = recibir_paquete(fd);
+            if (!paquete) {
+                // Cliente desconectadof (buscar_worker_por_socket(fd))
+                    eliminar_worker_y_cancelar_query(fd);
+                else if (buscar_querycontrol_por_socket(fd))
+                    eliminar_querycontrol_y_cancelar_query(fd);
+                else
+                    log_warning(logger_master, "## Socket %d desconectado, pero no pertenece a ningún cliente", fd);
+
+                pthread_mutex_unlock(&mutex_planificador);
+
+                FD_CLR(fd, &master_set);
+                close(fd);
+                continue;
+            }
+
+            // ==== Identificar tipo de cliente ====
+            Worker* worker = buscar_worker_por_socket(fd);
+            QueryControl* qc = buscar_querycontrol_por_socket(fd);
+            
+            if (worker != NULL) {
+            // ======= MENSAJE DESDE WORKER =======
+            switch (paquete->codigo_operacion) {
+                case READ: {
+                    t_operacion_query* op = deserializar_operacion_query(paquete->buffer);
+                    Query* q = buscar_query_por_socket_worker(fd);
+                    if (q) enviar_operacion_query(op, q->socket_query);
+                    destruir_operacion_query(op);
+                    break;
+                }
+
+                case END: {
+                    char* motivo = deserializar_string(paquete->buffer);
+                    Query* q = buscar_query_por_socket_worker(fd);
+                    if (q) {
+                        enviar_mensaje_formato(q->socket_query, "END|%s", motivo);
+                        q->estado = EXIT;
+                        worker->ocupado = false;
+                        log_info(logger_master, "## Worker %d finalizó Query %d (%s)", worker->id, q->id, motivo);
+                    }
+                    free(motivo);
+                    break;
+                }
+
+                case PROGRAM_COUNTER: {
+                    int pc = deserializar_int(paquete->buffer);
+                    Query* q = buscar_query_por_socket_worker(fd);
+                    if (q) {
+                        q->program_counter = pc;
+                        q->estado = READY;
+                        q->timestamp_entrada = ahora_ms();
+                        worker->ocupado = false;
+                        log_info(logger_master, "## Desalojo: Query %d (PC=%d) vuelve a READY", q->id, pc);
+                    }
+                    break;
+                }
+
+                default:
+                    log_warning(logger_master, "## Código desconocido desde Worker %d: %d", worker->id, paquete->codigo_operacion);
+                    break;
+            }
+        } 
+            
+                else if (qc != NULL) {
+            // ======= MENSAJE DESDE QUERYCONTROL =======
+            switch (paquete->codigo_operacion) {
+                case NEW_QUERY: {
+                    Query* nueva = deserializar_query(paquete->buffer);
+                    registrar_query(nueva, qc->socket);
+                    log_info(logger_master, "## Nueva Query %d recibida (prioridad %d)", nueva->id, nueva->prioridad);
+                    break;
+                }
+
+                case CANCEL_QUERY: {
+                    int qid = deserializar_int(paquete->buffer);
+                    pthread_mutex_lock(&mutex_planificador);
+                    Query* q = buscar_query_por_id(qid);
+                    if (q) {
+                        if (q->estado == READY) {
+                            q->estado = EXIT;
+                            log_info(logger_master, "## Query %d cancelada (READY)", qid);
+                        } else if (q->estado == EXEC && q->socket_worker != -1) {
+                            enviar_mensaje("PREEMPT", q->socket_worker);
+                            log_info(logger_master, "## Cancelación solicitada de Query %d (EXEC)", qid);
+                        }
+                    }
+                    pthread_mutex_unlock(&mutex_planificador);
+                    break;
+                }
+
+                default:
+                    log_warning(logger_master, "## Código desconocido desde QueryControl: %d", paquete->codigo_operacion);
+                    break;
+            }
+        } 
+        else {
+            log_warning(logger_master, "Socket %d no pertenece a ningún cliente registrado", fd);
+            close(fd);
+            FD_CLR(fd, &master_set);
         }
-    }
+
+        destruir_paquete(paquete);
+    } 
+}  
 
     close(server_fd);
-
-    //Creo la cola de ready
-    ready = list_create();
-
-    //Creo una lista para guardar los workers
-    workers = list_create();
-
-    //Inicio el hilo del servidor
-    pthread_t hilo_servidor;
-    pthread_create(&hilo_servidor, NULL, (void*) servidor_general,  NULL);
-    pthread_detach(hilo_servidor);
-
-    //Inicio el hilo del planificador
-    pthread_t hilo_planificador;
-    pthread_create(&hilo_planificador, NULL, (void*) planificar,  NULL);
-    pthread_detach(hilo_planificador);
-
-    while(true){
-        sleep(10);
-    }
-    
+    log_info(logger_master, "Master finalizando.");
     return 0;
 }
 
 void* servidor_general(){
-
     //Inicio el servidor
     int servidor = iniciar_servidor(string_itoa(master_configs.puertoescucha));
 
