@@ -64,7 +64,7 @@ void ejecutar_instruccion(const char* instruccion, int query_id, int pc, int soc
 void ejecutar_query(const char* path_query, int socket_master, int socket_storage, int query_id) {
     FILE* archivo = fopen(path_query, "r");
     if (!archivo) {
-        log_error(logger_worker, "❌ No se pudo abrir el archivo de Query: %s", path_query);
+        log_error(logger_worker, "No se pudo abrir el archivo de Query: %s", path_query);
         return;
     }
 
