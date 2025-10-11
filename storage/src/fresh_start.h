@@ -18,4 +18,6 @@ void inicializar_directorios();
 
 void inicializar_initial_file();
 
+
+void crear_blocks_fisicos();
 #endif 

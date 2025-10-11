@@ -7,6 +7,7 @@ void inicializar_initial_file() {
     // 1. Creo directorios
     fs_crear_directorio("files/initial_file");
     fs_crear_directorio("files/initial_file/BASE");
+    fs_crear_directorio("files/initial_file/BASE/logical_blocks");
     
     // 2. Creo metadata inicial
     metadataconfigs* metadata_inicial = malloc(sizeof(metadataconfigs));
@@ -70,13 +71,39 @@ void borrar_datos_existentes() {
 
     printf("Limpieza de directorios completada.\n");
 }
+void crear_blocks_fisicos(){
+    uint32_t cantidad = superblock_configs.fssize / superblock_configs.blocksize;
+    uint32_t tamanio = superblock_configs.blocksize;
 
+    printf("\nCreando %u archivos de bloque de %u bytes cada uno...\n", cantidad, tamanio);
+    for (uint32_t i = 0; i < cantidad; i++) {
+        char ruta_bloque[256];
+        // El formato "%05d" asegura los ceros a la izquierda (00000, 00001, etc.)
+        snprintf(ruta_bloque, sizeof(ruta_bloque), "%s/physical_blocks/block%05d.dat", storage_configs.puntomontaje, i);
+
+        FILE* f_bloque = fopen(ruta_bloque, "w");
+        if (f_bloque == NULL) {
+            fprintf(stderr, "ERROR FATAL: No se pudo crear el archivo de bloque %s\n", ruta_bloque);
+            exit(EXIT_FAILURE);
+        }
+
+        // ftruncate es la forma más eficiente de asignar un tamaño a un archivo vacío
+        if (ftruncate(fileno(f_bloque), tamanio) != 0) {
+            fprintf(stderr, "ERROR FATAL: No se pudo asignar el tamaño al bloque %s\n", ruta_bloque);
+            exit(EXIT_FAILURE);
+        }
+
+        fclose(f_bloque);
+    }
+    printf("Archivos de bloque físicos creados.\n");    
+}
 
 void inicializar_directorios(){
     // Si es un fresh start borro todo lo que hay en el puntomontaje
     if(storage_configs.freshstart){
         printf("Modo de inicio: FRESH START\n");
         borrar_datos_existentes();
+        crear_blocks_fisicos();
         inicializar_initial_file();
         return;
     }
