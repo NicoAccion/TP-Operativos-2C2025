@@ -49,10 +49,10 @@ void inicializar_logger_storage(char* nivel_log) {
     t_log_level level = log_level_from_string(nivel_log);
     logger_storage = log_create("storage.log", "STORAGE", true, level);
     if (!logger_storage) {
-        printf("❌ Error al crear el logger de Storage\n");
+        printf("Error al crear el logger de Storage\n");
         exit(EXIT_FAILURE);
     }
-    log_info(logger_storage, "📦 Logger de Storage inicializado (nivel %s)", nivel_log);
+    log_info(logger_storage, "Logger de Storage inicializado (nivel %s)", nivel_log);
 }
 
 // ===================== EVENTOS DE WORKER =====================
