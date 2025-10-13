@@ -31,6 +31,11 @@ typedef enum {
     PAQUETE_QUERY_COMPLETA = 3,
     READ = 4,
     END = 5,
+    CREATE,
+    TRUNCATE,
+    DELETE,
+    COMMIT,
+    TAG,
 } t_codigo_operacion;
 
 
@@ -307,7 +312,7 @@ t_buffer* serializar_query_completa(t_query_completa* master);
  */
 t_query_completa* deserializar_query_completa(t_buffer* buffer);
 
-void destruir_operacion_query(t_operacion_query* op)
+void destruir_operacion_query(t_operacion_query* op);
 
 #endif
 
