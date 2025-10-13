@@ -1,4 +1,4 @@
-#include "worker_interpreter.h"
+/*#include "worker_interpreter.h"
 #include "worker_memoria.h"
 #include "worker.h"
 #include <stdio.h>
@@ -119,3 +119,6 @@ void ejecutar_query(const char* path_query, int socket_master, int socket_storag
 
     fclose(archivo);
 }
+
+*/
+//la interpretacion ya esta en main, pero se puede volver a usar esto, solo lo comente para que compile

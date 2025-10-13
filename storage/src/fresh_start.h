@@ -8,7 +8,7 @@
 
 #include <utils/configs.h>
 #include "storage-configs.h"
-#include "fs_simulacion.h"
+//#include "fs_simulacion.h"
 
 /**
  * @brief Inicializa el FS en base a la config del archivo superblock.config

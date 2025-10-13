@@ -2,44 +2,42 @@
 #define ATENDER_HILOS_H_
 
 #include <commons/collections/list.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <stdbool.h>
+#include <string.h>
 
 #include "master-configs.h"
 #include "master-log.h"
-
 #include <utils/serializacion.h>
 
-#include <pthread.h>
-
+// Estructura para la info de un worker conectado
 typedef struct {
-    t_paquete* paquete;
-    int cliente;
-} t_conexion;
-
-typedef struct {
-    uint32_t socket_cliente;
+    int socket_cliente;
     uint32_t id_worker;
     bool libre;
-    t_query_completa query;
+    t_query_completa* query_asignada; // Puntero a la query que está ejecutando
 } t_worker_completo;
 
-extern uint32_t contador_queries;
 
-extern uint32_t contador_workers;
-
+// Variables globales para las listas y contadores
 extern t_list* ready;
-
 extern t_list* exec;
-
 extern t_list* workers;
 
-void* atender_query_control(void* arg);
+// Variables globales para sincronización
+extern pthread_mutex_t mutex_ready;
+extern pthread_mutex_t mutex_exec;
+extern pthread_mutex_t mutex_workers;
+extern sem_t sem_queries_en_ready;
 
-void* atender_worker(void* arg);
 
-void* escuchar_worker(void* arg);
+// --- Prototipos de Funciones ---
+void inicializar_estructuras_globales();
+void destruir_estructuras_globales();
 
-bool buscar_id_query(void* arg);
-
-bool buscar_id_worker(void* arg);
+void manejar_nueva_conexion(void* arg);
+void atender_query_control(int socket_cliente, t_paquete* paquete);
+void atender_worker(int socket_cliente, t_paquete* paquete);
 
 #endif

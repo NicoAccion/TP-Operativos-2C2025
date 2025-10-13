@@ -38,12 +38,12 @@ int main(int argc, char* argv[]) {
     //Serializo el path de la query y la prioridad
     t_query query = {path_query, prioridad};
     t_buffer* buffer = serializar_query(&query);
-    t_paquete* paquete = empaquetar_buffer(PAQUETE_QUERY, buffer);
+    t_paquete* paquete = empaquetar_buffer(HANDSHAKE_QUERYCONTROL, buffer); //cambie PAQUETE_QUERY que no esta en el enum de serializacion.h por uno que si esta
 
     //Se lo envío a Master
     enviar_paquete(socket_master, paquete);
     log_info(logger_query, "## Solicitud de ejecución de Query: %s, prioridad: %d", path_query, prioridad);
-    destruir_paquete(paquete);
+    //destruir_paquete(paquete); no seria liberar_paquete?
     
     escuchar_master(socket_master);
 

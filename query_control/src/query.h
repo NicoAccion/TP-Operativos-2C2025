@@ -10,5 +10,6 @@
 #include "query-configs.h"
 #include "query-log.h"
 
+void escuchar_master(int socket_master);
 
 #endif
