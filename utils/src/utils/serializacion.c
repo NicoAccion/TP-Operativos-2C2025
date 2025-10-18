@@ -163,8 +163,15 @@ t_paquete* recibir_paquete(int socket){
 }
 
 void liberar_paquete(t_paquete* paquete){
-    free(paquete->buffer->stream);
-    free(paquete->buffer);
+    if (paquete == NULL) {
+        return;
+    }
+    if (paquete->buffer) { 
+        if (paquete->buffer->stream) {
+            free(paquete->buffer->stream);
+        }
+        free(paquete->buffer);
+    }
     free(paquete);
 }
 
@@ -250,5 +257,5 @@ void destruir_operacion_query(t_operacion_query* op) {
     free(op->informacion);
     free(op->file);
     free(op->tag);
-    free(op);
+    //free(op);
 }

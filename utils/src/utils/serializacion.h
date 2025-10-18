@@ -36,6 +36,10 @@ typedef enum {
     DELETE,
     COMMIT,
     TAG,
+    //Codigos de respuesta del storage
+    HANDSAHKE_STORAGE_RTA,
+    OP_OK,
+    OP_ERROR,
 } t_codigo_operacion;
 
 

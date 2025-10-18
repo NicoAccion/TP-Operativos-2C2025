@@ -9,4 +9,6 @@
 #include "worker-log.h"
 
 
+void enviar_operacion_storage(int socket_storage, t_codigo_operacion op_code, t_operacion_query* op_query);
+
 #endif

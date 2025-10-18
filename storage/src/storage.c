@@ -45,23 +45,92 @@ void* atender_worker(void* arg) {
     int socket_worker = *((int*) arg);
     free(arg);
 
-    log_info(logger_storage, "## Se conecta un Worker.");
+    // --- 1. Handshake Inicial ---
+    // El worker se conecta y envía su ID 
+    t_paquete* paquete_handshake = recibir_paquete(socket_worker);
+    uint32_t worker_id;
 
+    if (paquete_handshake == NULL || paquete_handshake->codigo_operacion != HANDSHAKE_WORKER) {
+        log_error(logger_storage, "## Se desconecta un Worker (falló el handshake inicial).");
+        if (paquete_handshake) liberar_paquete(paquete_handshake);
+        close(socket_worker);
+        return NULL;
+    }
+
+    worker_id = deserializar_worker(paquete_handshake->buffer);
+    log_info(logger_storage, "## Se conecta el Worker %d Cantidad de Workers: <CANTIDAD_MOCK>", worker_id); 
+    liberar_paquete(paquete_handshake);
+    
+    // Respondemos al Worker con el BLOCK_SIZE 
+    t_buffer* buffer_rta_handshake = buffer_create(sizeof(uint32_t));
+    buffer_add_uint32(buffer_rta_handshake, superblock_configs.blocksize);
+
+    t_paquete* paquete_rta_handshake = empaquetar_buffer(HANDSAHKE_STORAGE_RTA, buffer_rta_handshake);
+    enviar_paquete(socket_worker, paquete_rta_handshake);
+    log_info(logger_storage, "Handshake con Worker %d completado. Enviando BLOCK_SIZE: %d.", worker_id, superblock_configs.blocksize);
+
+
+    // --- 2. Loop de Operaciones ---
     while(1) {
         t_paquete* paquete = recibir_paquete(socket_worker);
 
         if (paquete == NULL) {
-            log_info(logger_storage, "## Se desconecta un Worker.");
+            log_info(logger_storage, "## Se desconecta el Worker %d Cantidad de Workers: <CANTIDAD_MOCK>", worker_id); 
             break; 
         }
 
-        log_info(logger_storage, "Petición recibida del Worker (op_code: %d). Respondiendo OK.", paquete->codigo_operacion);
+        t_codigo_operacion op_respuesta = OP_OK; // Respuesta por defecto 
+        t_operacion_query* op_query = NULL;      // Para deserializar los datos
+
+        switch (paquete->codigo_operacion) {
+            
+            case CREATE:
+                op_query = deserializar_operacion_query(paquete->buffer);
+                // Se debe captura ID
+                log_info(logger_storage, "##<0> File Creado %s:%s", op_query->file, op_query->tag);
+                
+                destruir_operacion_query(op_query); // Liberamos la memoria
+                break;
+                
+            case TRUNCATE:
+                op_query = deserializar_operacion_query(paquete->buffer);
+                log_info(logger_storage, "##<0> File Truncado %s:%s Tamaño: %s", op_query->file, op_query->tag, op_query->informacion);
+                destruir_operacion_query(op_query);
+                break;
+
+            case DELETE:
+                op_query = deserializar_operacion_query(paquete->buffer);
+                log_info(logger_storage, "##<0> Tag Eliminado %s:%s", op_query->file, op_query->tag);
+                destruir_operacion_query(op_query);
+                break;
+
+            case COMMIT:
+                op_query = deserializar_operacion_query(paquete->buffer);
+                log_info(logger_storage, "##<0> Commit de File: Tag %s:%s", op_query->file, op_query->tag);
+                destruir_operacion_query(op_query);
+                break;
+
+            case TAG:
+                op_query = deserializar_operacion_query(paquete->buffer);
+                // (Ajustar t_operacion_query y serializacion para esto
+                log_info(logger_storage, "##<0> Tag creado %s:%s", op_query->file, op_query->tag);
+                destruir_operacion_query(op_query);
+                break;
+            
+            // --- Falta READ y WRITE---
+
+            default:
+                log_warning(logger_storage, "Operación desconocida recibida (op_code: %d).", paquete->codigo_operacion);
+                op_respuesta = OP_ERROR; // Respondemos con error
+                break;
+        }
         
-        t_buffer* buffer_respuesta = buffer_create(0);
-        t_paquete* paquete_respuesta = empaquetar_buffer(100, buffer_respuesta); // Usamos un op_code genérico para "OK" por ahora
+        liberar_paquete(paquete); // Liberamos el paquete que recibimos
+
+        // Enviamos la respuesta "OK" 
+        t_buffer* buffer_respuesta = buffer_create(0); // Buffer vacío
+        t_paquete* paquete_respuesta = empaquetar_buffer(op_respuesta, buffer_respuesta);
         enviar_paquete(socket_worker, paquete_respuesta);
-        
-        liberar_paquete(paquete);
     }
 
     close(socket_worker);
