@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
 
     //Cargo los argumentos en variables
     char* path_config = argv[1];
-    char* path_query = argv[2];
+    char* path_query = realpath(argv[2], NULL);
     uint32_t prioridad = atoi(argv[3]);
     
     //Inicializo las configs de Query Control
@@ -31,20 +31,18 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // --- LOG: Conexión con Master ---
     log_info(logger_query, "## Conexión al Master exitosa. IP: %s, Puerto: %d",
              query_configs.ipmaster, query_configs.puertomaster);
     
     //Serializo el path de la query y la prioridad
     t_query query = {path_query, prioridad};
     t_buffer* buffer = serializar_query(&query);
-    t_paquete* paquete = empaquetar_buffer(HANDSHAKE_QUERYCONTROL, buffer); //cambie PAQUETE_QUERY que no esta en el enum de serializacion.h por uno que si esta
+    t_paquete* paquete = empaquetar_buffer(HANDSHAKE_QUERYCONTROL, buffer);
 
     //Se lo envío a Master
     enviar_paquete(socket_master, paquete);
     log_info(logger_query, "## Solicitud de ejecución de Query: %s, prioridad: %d", path_query, prioridad);
-    //destruir_paquete(paquete); no seria liberar_paquete?
-    
+
     escuchar_master(socket_master);
 
     close(socket_master);
@@ -53,7 +51,7 @@ int main(int argc, char* argv[]) {
 }
 
 void escuchar_master(int socket_master) {
-    while (1) {
+    while(true) {
 
         t_paquete* paquete = recibir_paquete(socket_master);
 
@@ -64,16 +62,15 @@ void escuchar_master(int socket_master) {
 
         switch(paquete->codigo_operacion){
             case READ:
-                t_operacion_query* op = deserializar_operacion_query(paquete->buffer);
-                log_info(logger_query, "## READ recibido: File=%s:%s -> Contenido=%s",
-                         op->file, op->tag, op->informacion);
-                destruir_operacion_query(op);
+                t_operacion_read* operacion = deserializar_operacion_read(paquete->buffer);
+                log_info(logger_query, "## Lectura realizada: File %s:%s, contenido: %s",
+                         operacion->file, operacion->tag, operacion->informacion);
+                destruir_operacion_read(operacion);
                 liberar_paquete(paquete);
                 break;
 
             case END:
-                uint32_t len;
-                char* motivo = buffer_read_string(paquete->buffer, &len);
+                char* motivo = deserializar_operacion_end(paquete->buffer);
                 log_info(logger_query, "## Query finalizada: %s", motivo);
                 free(motivo);
                 liberar_paquete(paquete);
@@ -84,5 +81,6 @@ void escuchar_master(int socket_master) {
                 liberar_paquete(paquete);
                 break;
         }
-        }
-        }
+    }
+}
+

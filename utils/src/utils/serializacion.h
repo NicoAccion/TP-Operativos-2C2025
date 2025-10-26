@@ -31,11 +31,11 @@ typedef enum {
     PAQUETE_QUERY_COMPLETA = 3,
     READ = 4,
     END = 5,
-    CREATE,
-    TRUNCATE,
-    DELETE,
-    COMMIT,
-    TAG,
+    CREATE = 6,
+    TRUNCATE = 7,
+    DELETE = 8,
+    COMMIT = 9,
+    TAG = 10,
 } t_codigo_operacion;
 
 
@@ -82,8 +82,8 @@ typedef struct {
 } t_query;
 
 /**
- * @struct t_operacion_query
- * @brief Estructura que representa el mensaje que recibe query control
+ * @struct t_operacion_read
+ * @brief Estructura que representa la información leída por la query
  * 
  * @param informacion: Información leída
  * @param file: Nombre del file
@@ -93,7 +93,7 @@ typedef struct {
     char* informacion;
     char* file;
     char* tag;
-} t_operacion_query;
+} t_operacion_read;
 
 /**
  * @enum t_estado
@@ -248,7 +248,7 @@ void liberar_paquete(t_paquete* paquete);
 /**
  * @brief Recibe una query y la serializa
  * 
- * @param solicitud Puntero a la estructura de la query
+ * @param query Puntero a la estructura de la query
  * @return t_buffer* Puntero al buffer que contiene la query
  */
 t_buffer* serializar_query(t_query* query);
@@ -263,20 +263,37 @@ t_query* deserializar_query(t_buffer* buffer);
 
 
 /**
- * @brief Recibe una operacion query y la serializa
+ * @brief Recibe una operacion read y la serializa
  * 
- * @param solicitud Puntero a la estructura de la operacion query
- * @return t_buffer* Puntero al buffer que contiene la operacion query
+ * @param operacion_read Puntero a la estructura de la operacion read
+ * @return t_buffer* Puntero al buffer que contiene la operacion read
  */
-t_buffer* serializar_operacion_query(t_operacion_query* operacion_query);
+t_buffer* serializar_operacion_read(t_operacion_read* operacion_read);
+
 
 /**
- * @brief Recibe un buffer y lo deserializa en una operacion query
+ * @brief Recibe un buffer y lo deserializa en una operacion read
  * 
- * @param buffer Puntero al buffer que contiene la operacion query
- * @return t_operacion_query* Puntero a la estructura de la operacion query
+ * @param buffer Puntero al buffer que contiene la operacion read
+ * @return t_operacion_read* Puntero a la estructura de la operacion read
  */
-t_operacion_query* deserializar_operacion_query(t_buffer* buffer);
+t_operacion_read* deserializar_operacion_read(t_buffer* buffer);
+
+/**
+ * @brief Recibe el motivo de un END y lo serializa
+ * 
+ * @param operacion_end Motivo por el que se envió un END
+ * @return t_buffer* Puntero al buffer que contiene la operacion read
+ */
+t_buffer* serializar_operacion_end(char* operacion_end);
+
+/**
+ * @brief Recibe un buffer y lo deserializa en un motivo de END
+ * 
+ * @param buffer Puntero al buffer que contiene el motivo de END
+ * @return char* Motivo del END 
+ */
+char* deserializar_operacion_end(t_buffer* buffer);
 
 
 /**
@@ -312,7 +329,7 @@ t_buffer* serializar_query_completa(t_query_completa* master);
  */
 t_query_completa* deserializar_query_completa(t_buffer* buffer);
 
-void destruir_operacion_query(t_operacion_query* op);
+
 
 #endif
 

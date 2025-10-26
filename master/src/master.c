@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
     log_info(logger_master, "Hilo de servidor para conexiones lanzado.");
 
     pthread_create(&hilo_planificador, NULL, (void*) planificar, NULL);
-    log_info(logger_master, "Hilo de planificación FIFO lanzado.");
+    log_info(logger_master, "Hilo de planificación lanzado.");
 
     // 5. Esperar a que los hilos terminen (en este caso, nunca)
     pthread_join(hilo_servidor, NULL);
@@ -54,6 +54,6 @@ void* servidor_general() {
         pthread_create(&hilo_cliente, NULL, (void*) manejar_nueva_conexion, (void*) cliente_socket_ptr);
         pthread_detach(hilo_cliente);
     }
- 
+
     return NULL;
 }

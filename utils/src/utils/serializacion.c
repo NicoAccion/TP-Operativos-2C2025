@@ -191,25 +191,37 @@ t_query* deserializar_query(t_buffer* buffer){
 }
 
 
-t_buffer* serializar_operacion_query(t_operacion_query* operacion_query){
-    uint32_t tamanio = 3 * sizeof(uint32_t) + strlen(operacion_query->informacion) + 
-    strlen(operacion_query->file) + strlen(operacion_query->tag);
+t_buffer* serializar_operacion_read(t_operacion_read* operacion_read){
+    uint32_t tamanio = 3 * sizeof(uint32_t) + strlen(operacion_read->informacion) + 
+    strlen(operacion_read->file) + strlen(operacion_read->tag);
     t_buffer* buffer = buffer_create(tamanio);
-    buffer_add_string(buffer, strlen(operacion_query->informacion), operacion_query->informacion);
-    buffer_add_string(buffer, strlen(operacion_query->file), operacion_query->file);
-    buffer_add_string(buffer, strlen(operacion_query->tag), operacion_query->tag);
+    buffer_add_string(buffer, strlen(operacion_read->informacion), operacion_read->informacion);
+    buffer_add_string(buffer, strlen(operacion_read->file), operacion_read->file);
+    buffer_add_string(buffer, strlen(operacion_read->tag), operacion_read->tag);
     return buffer;
 }
 
-t_operacion_query* deserializar_operacion_query(t_buffer* buffer){
-    t_operacion_query* operacion_query = malloc(sizeof(t_operacion_query));
+t_operacion_read* deserializar_operacion_read(t_buffer* buffer){
+    t_operacion_read* operacion_read = malloc(sizeof(t_operacion_read));
     uint32_t length;
-    operacion_query->informacion = buffer_read_string(buffer, &length);
-    operacion_query->file = buffer_read_string(buffer, &length);
-    operacion_query->tag = buffer_read_string(buffer, &length);
-    return operacion_query;
+    operacion_read->informacion = buffer_read_string(buffer, &length);
+    operacion_read->file = buffer_read_string(buffer, &length);
+    operacion_read->tag = buffer_read_string(buffer, &length);
+    return operacion_read;
 }
 
+t_buffer* serializar_operacion_end(char* operacion_end){
+    uint32_t tamanio = sizeof(uint32_t) + strlen(operacion_end);
+    t_buffer* buffer = buffer_create(tamanio);
+    buffer_add_string(buffer, strlen(operacion_end), operacion_end);
+    return buffer;
+}
+
+char* deserializar_operacion_end(t_buffer* buffer){
+    uint32_t length;
+    char* operacion_end = buffer_read_string(buffer, &length);
+    return operacion_end;
+}
 
 t_buffer* serializar_worker(uint32_t id) {
     uint32_t tamanio = sizeof(uint32_t);
@@ -242,13 +254,4 @@ t_query_completa* deserializar_query_completa(t_buffer* buffer){
     query_completa->id_query = buffer_read_uint32(buffer);
     query_completa->estado = buffer_read_uint32(buffer);
     return query_completa;
-}
-
-void destruir_operacion_query(t_operacion_query* op) {
-    if (op == NULL) return;
-
-    free(op->informacion);
-    free(op->file);
-    free(op->tag);
-    free(op);
 }

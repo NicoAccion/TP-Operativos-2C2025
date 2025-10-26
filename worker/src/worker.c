@@ -148,8 +148,8 @@ void ejecutar_query(int query_id, const char* path_query, int socket_master, int
             
             char* valor_leido = leer_de_memoria(query_id, file, tag, atoi(direccion), atoi(tamanio));
             
-            t_operacion_query op = {.file = file, .tag = tag, .informacion = valor_leido};
-            t_buffer* buffer_read = serializar_operacion_query(&op);
+            t_operacion_read op = {.file = file, .tag = tag, .informacion = valor_leido};
+            t_buffer* buffer_read = serializar_operacion_read(&op);
             t_paquete* paquete_read = empaquetar_buffer(READ, buffer_read);
             enviar_paquete(socket_master, paquete_read);
 
@@ -161,8 +161,7 @@ void ejecutar_query(int query_id, const char* path_query, int socket_master, int
             // La lógica real escribiría las páginas sucias de memoria a disco.
         } else if (strcmp(instruccion, "END") == 0) {
             char* motivo = "OK";
-            t_buffer* buffer_end = buffer_create(sizeof(uint32_t) + strlen(motivo));
-            buffer_add_string(buffer_end, strlen(motivo), motivo);
+            t_buffer* buffer_end = serializar_operacion_end(motivo);
             t_paquete* paquete_end = empaquetar_buffer(END, buffer_end);
             enviar_paquete(socket_master, paquete_end);
             fin = true;

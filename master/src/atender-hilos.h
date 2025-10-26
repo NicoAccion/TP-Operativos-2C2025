@@ -30,14 +30,20 @@ extern pthread_mutex_t mutex_ready;
 extern pthread_mutex_t mutex_exec;
 extern pthread_mutex_t mutex_workers;
 extern sem_t sem_queries_en_ready;
+extern sem_t sem_workers_libres;
 
 
-// --- Prototipos de Funciones ---
+// Prototipos de Funciones
 void inicializar_estructuras_globales();
 void destruir_estructuras_globales();
+
 
 void manejar_nueva_conexion(void* arg);
 void atender_query_control(int socket_cliente, t_paquete* paquete);
 void atender_worker(int socket_cliente, t_paquete* paquete);
+
+bool buscar_id_query(void* arg);
+
+bool buscar_id_worker(void* arg);
 
 #endif
