@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
     inicializar_logger_worker(worker_configs.loglevel);
     log_info(logger_worker, "## Worker %d inicializado", id_worker);
 
-    // ===== Conexión con Storage (mock) =====
+// ===== Conexión con Storage =====
     char* puerto_storage_str = string_itoa(worker_configs.puertostorage);
     int socket_storage = crear_conexion(worker_configs.ipstorage, puerto_storage_str);
     free(puerto_storage_str);
@@ -31,10 +31,30 @@ int main(int argc, char* argv[]) {
         log_error(logger_worker, "Error al conectar con Storage");
         return EXIT_FAILURE;
     }
-    log_info(logger_worker, "Conectado a Storage");
-    int tamanio_bloque_mock = 128;
-    inicializar_memoria(worker_configs.tammemoria, tamanio_bloque_mock);
+    log_info(logger_worker, "Conectado a Storage. Realizando handshake...");
 
+    // 1. Enviar ID de Worker a Storage
+    t_buffer* buffer_id_storage = serializar_worker(id_worker);
+    t_paquete* paquete_handshake_storage = empaquetar_buffer(HANDSHAKE_WORKER, buffer_id_storage);
+    enviar_paquete(socket_storage, paquete_handshake_storage);
+
+    // 2. Recibir BLOCK_SIZE de Storage
+    t_paquete* rta_handshake_storage = recibir_paquete(socket_storage);
+    if (rta_handshake_storage == NULL || rta_handshake_storage->codigo_operacion != HANDSAHKE_STORAGE_RTA) {
+        log_error(logger_worker, "Error en handshake con Storage. Storage desconectado.");
+        if(rta_handshake_storage) liberar_paquete(rta_handshake_storage);
+        close(socket_storage);
+        return EXIT_FAILURE;
+    }
+    
+    // 3. Deserializar el BLOCK_SIZE y liberar paquete
+    uint32_t block_size = buffer_read_uint32(rta_handshake_storage->buffer);
+    liberar_paquete(rta_handshake_storage);
+
+    log_info(logger_worker, "Handshake con Storage OK. BLOCK_SIZE recibido: %d", block_size);
+    
+    // 4. Inicializar memoria AHORA con el block_size
+    inicializar_memoria(worker_configs.tammemoria, block_size);
 
     // ===== Conexión con Master =====
     char* puerto_master_str = string_itoa(worker_configs.puertomaster);
@@ -96,70 +116,131 @@ void ejecutar_query(int query_id, const char* path_query, int socket_master, int
     bool fin = false;
 
     while (!fin && fgets(linea, sizeof(linea), archivo)) {
-        linea[strcspn(linea, "\r\n")] = 0;
-        if (strlen(linea) == 0) continue;
+        linea[strcspn(linea, "\r\n")] = 0; // Limpia saltos de línea
+        if (strlen(linea) == 0) continue; // Salta líneas vacías
 
-        char* linea_copy = strdup(linea);
+        char* linea_copy = strdup(linea); // Copia para el log final
         char* instruccion = strtok(linea, " ");
         
+        if (!instruccion) { // Maneja líneas con solo espacios
+            free(linea_copy);
+            continue;
+        }
+
         log_info(logger_worker, "## Query %d: FETCH Program Counter: %d - %s", query_id, pc, instruccion);
-        usleep(worker_configs.retardomemoria * 1000);
+        usleep(worker_configs.retardomemoria * 1000); // Simula retardo
+
+        // Preparamos la operación query en el stack
+        t_operacion_query op;
+        op.informacion = strdup(""); // Inicializar a string vacío
+        op.file = strdup("");
+        op.tag = strdup("");
+        
+        char* file_tag_str;
+        char* file_tag_copy; // Copia para strtok
 
         if (strcmp(instruccion, "CREATE") == 0) {
-            char* file_tag = strtok(NULL, " ");
-            enviar_operacion_storage_simple(socket_storage, CREATE, file_tag);
+            file_tag_str = strtok(NULL, " "); // "MATERIAS:BASE"
+            
+            if (file_tag_str) {
+                file_tag_copy = strdup(file_tag_str);
+                free(op.file); op.file = strdup(strtok(file_tag_copy, ":"));
+                free(op.tag);  op.tag  = strdup(strtok(NULL, ":"));
+                enviar_operacion_storage(socket_storage, CREATE, &op);
+                free(file_tag_copy);
+            }
         
         } else if (strcmp(instruccion, "TRUNCATE") == 0) {
-            char* file_tag = strtok(NULL, " ");
-            char* tamanio = strtok(NULL, " ");
-            enviar_operacion_storage_mock(socket_storage, TRUNCATE, file_tag, tamanio);
+            file_tag_str = strtok(NULL, " "); // "MATERIAS:BASE"
+            char* tamanio_str = strtok(NULL, " "); // "1024"
+            
+            if (file_tag_str && tamanio_str) {
+                file_tag_copy = strdup(file_tag_str);
+                free(op.informacion); op.informacion = strdup(tamanio_str); // Guardamos el tamaño
+                free(op.file); op.file = strdup(strtok(file_tag_copy, ":"));
+                free(op.tag);  op.tag  = strdup(strtok(NULL, ":"));
+                enviar_operacion_storage(socket_storage, TRUNCATE, &op);
+                free(file_tag_copy);
+            }
         
         } else if (strcmp(instruccion, "TAG") == 0) {
-            char* file_tag_origen = strtok(NULL, " ");
-            char* file_tag_destino = strtok(NULL, " ");
-            enviar_operacion_storage_mock(socket_storage, TAG, file_tag_origen, file_tag_destino);
+            char* file_tag_origen_str = strtok(NULL, " ");
+            char* file_tag_destino_str = strtok(NULL, " ");
+            
+            if(file_tag_origen_str && file_tag_destino_str) {
+                file_tag_copy = strdup(file_tag_origen_str);
+                // Re-utilizamos la struct: 'file:tag' para origen, 'informacion' para destino
+                free(op.informacion); op.informacion = strdup(file_tag_destino_str);
+                free(op.file); op.file = strdup(strtok(file_tag_copy, ":"));
+                free(op.tag);  op.tag  = strdup(strtok(NULL, ":"));
+                enviar_operacion_storage(socket_storage, TAG, &op);
+                free(file_tag_copy);
+            }
 
         } else if (strcmp(instruccion, "COMMIT") == 0) {
-             char* file_tag = strtok(NULL, " ");
-             enviar_operacion_storage_simple(socket_storage, COMMIT, file_tag);
+             file_tag_str = strtok(NULL, " ");
+             
+             if(file_tag_str) {
+                file_tag_copy = strdup(file_tag_str);
+                free(op.file); op.file = strdup(strtok(file_tag_copy, ":"));
+                free(op.tag);  op.tag  = strdup(strtok(NULL, ":"));
+                enviar_operacion_storage(socket_storage, COMMIT, &op);
+                free(file_tag_copy);
+             }
 
         } else if (strcmp(instruccion, "DELETE") == 0) {
-            char* file_tag = strtok(NULL, " ");
-            enviar_operacion_storage_simple(socket_storage, DELETE, file_tag);
+            file_tag_str = strtok(NULL, " ");
+            
+            if(file_tag_str) {
+                file_tag_copy = strdup(file_tag_str);
+                free(op.file); op.file = strdup(strtok(file_tag_copy, ":"));
+                free(op.tag);  op.tag  = strdup(strtok(NULL, ":"));
+                enviar_operacion_storage(socket_storage, DELETE, &op);
+                free(file_tag_copy);
+            }
 
         } else if (strcmp(instruccion, "WRITE") == 0) {
+            // Aun no habla con storage con write
             char* file_tag = strtok(NULL, " ");
             char* direccion = strtok(NULL, " ");
-            char* contenido = strtok(NULL, ""); 
-            char* file_tag_copy = strdup(file_tag);
-            char* file = strtok(file_tag_copy, ":");
-            char* tag = strtok(NULL, ":");
+            char* contenido = strtok(NULL, ""); // Captura el resto de la línea
             
-            escribir_en_memoria(query_id, file, tag, atoi(direccion), contenido);
-            free(file_tag_copy);
+            if(file_tag && direccion && contenido) {
+                char* file_tag_copy = strdup(file_tag);
+                char* file = strtok(file_tag_copy, ":");
+                char* tag = strtok(NULL, ":");
+                
+                escribir_en_memoria(query_id, file, tag, atoi(direccion), contenido);
+                free(file_tag_copy);
+            }
 
         } else if (strcmp(instruccion, "READ") == 0) {
+            //aun no habla con storage si hay read
             char* file_tag = strtok(NULL, " ");
             char* direccion = strtok(NULL, " ");
             char* tamanio = strtok(NULL, " ");
-            char* file_tag_copy = strdup(file_tag);
-            char* file = strtok(file_tag_copy, ":");
-            char* tag = strtok(NULL, ":");
             
-            char* valor_leido = leer_de_memoria(query_id, file, tag, atoi(direccion), atoi(tamanio));
-            
-            t_operacion_read op = {.file = file, .tag = tag, .informacion = valor_leido};
-            t_buffer* buffer_read = serializar_operacion_read(&op);
-            t_paquete* paquete_read = empaquetar_buffer(READ, buffer_read);
-            enviar_paquete(socket_master, paquete_read);
+            if(file_tag && direccion && tamanio) {
+                char* file_tag_copy = strdup(file_tag);
+                char* file = strtok(file_tag_copy, ":");
+                char* tag = strtok(NULL, ":");
+                
+                char* valor_leido = leer_de_memoria(query_id, file, tag, atoi(direccion), atoi(tamanio));
+                
+                // Usamos una struct temporal para enviar al Master
+                t_operacion_query op_read = {.file = file, .tag = tag, .informacion = valor_leido};
+                t_buffer* buffer_read = serializar_operacion_query(&op_read);
+                t_paquete* paquete_read = empaquetar_buffer(READ, buffer_read);
+                enviar_paquete(socket_master, paquete_read);
 
-            free(valor_leido);
-            free(file_tag_copy);
+                free(valor_leido);
+                free(file_tag_copy);
+            }
 
         } else if (strcmp(instruccion, "FLUSH") == 0) {
-            // FLUSH es una operación local de memoria, no necesita ir a Storage en este punto.
-            // La lógica real escribiría las páginas sucias de memoria a disco.
+            // Lógica de FLUSH 
         } else if (strcmp(instruccion, "END") == 0) {
+            // Lógica de END
             char* motivo = "OK";
             t_buffer* buffer_end = serializar_operacion_end(motivo);
             t_paquete* paquete_end = empaquetar_buffer(END, buffer_end);
@@ -167,38 +248,30 @@ void ejecutar_query(int query_id, const char* path_query, int socket_master, int
             fin = true;
         }
         
+        // Liberamos la memoria de los strings dentro de 'op'
+        destruir_operacion_query(&op);
+        
         log_info(logger_worker, "## Query %d: Instrucción realizada: %s", query_id, linea_copy);
-        free(linea_copy);
+        free(linea_copy); // Liberamos la copia para el log
         pc++;
     }
 
     fclose(archivo);
 }
 
-
-// --- Funciones Auxiliares para Comunicación con Storage---
-
-void enviar_operacion_storage_mock(int socket_storage, t_codigo_operacion op_code, const char* arg1, const char* arg2) {
-    // Usamos funciones de utils
-    size_t size = sizeof(uint32_t) + strlen(arg1) + sizeof(uint32_t) + strlen(arg2);
-    t_buffer* buffer = buffer_create(size);
-    buffer_add_string(buffer, strlen(arg1), (char*) arg1);
-    buffer_add_string(buffer, strlen(arg2), (char*) arg2);
-
+void enviar_operacion_storage(int socket_storage, t_codigo_operacion op_code, t_operacion_query* op_query) {
+    
+    t_buffer* buffer = serializar_operacion_query(op_query);
     t_paquete* paquete = empaquetar_buffer(op_code, buffer);
     enviar_paquete(socket_storage, paquete);
 
-    // Esperamos respuesta
-    liberar_paquete(recibir_paquete(socket_storage));
-}
-
-void enviar_operacion_storage_simple(int socket_storage, t_codigo_operacion op_code, const char* arg1) {
-    size_t size = sizeof(uint32_t) + strlen(arg1);
-    t_buffer* buffer = buffer_create(size);
-    buffer_add_string(buffer, strlen(arg1), (char*) arg1);
-
-    t_paquete* paquete = empaquetar_buffer(op_code, buffer);
-    enviar_paquete(socket_storage, paquete);
-
-    liberar_paquete(recibir_paquete(socket_storage));
+    // Esperamos respuesta 
+    t_paquete* paquete_rta = recibir_paquete(socket_storage);
+    if (paquete_rta == NULL) {
+        log_error(logger_worker, "Storage se desconectó inesperadamente.");
+        //Se podria manejar errores abruptos
+    } else {
+        log_info(logger_worker, "Recibida confirmación del Storage (op_code: %d)", paquete_rta->codigo_operacion); //logeamos la respuesta segun el valor del code_op en utils
+        liberar_paquete(paquete_rta);
+    }
 }

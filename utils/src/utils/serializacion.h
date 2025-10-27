@@ -36,6 +36,10 @@ typedef enum {
     DELETE = 8,
     COMMIT = 9,
     TAG = 10,
+    //Codigos de respuesta del storage
+    HANDSAHKE_STORAGE_RTA,
+    OP_OK,
+    OP_ERROR,
 } t_codigo_operacion;
 
 
@@ -82,7 +86,7 @@ typedef struct {
 } t_query;
 
 /**
- * @struct t_operacion_read
+ * @struct t_operacion_query
  * @brief Estructura que representa la información leída por la query
  * 
  * @param informacion: Información leída
@@ -93,7 +97,7 @@ typedef struct {
     char* informacion;
     char* file;
     char* tag;
-} t_operacion_read;
+} t_operacion_query;
 
 /**
  * @enum t_estado
@@ -263,21 +267,21 @@ t_query* deserializar_query(t_buffer* buffer);
 
 
 /**
- * @brief Recibe una operacion read y la serializa
+ * @brief Recibe una operacion query y la serializa
  * 
- * @param operacion_read Puntero a la estructura de la operacion read
- * @return t_buffer* Puntero al buffer que contiene la operacion read
+ * @param operacion_query Puntero a la estructura de la operacion query
+ * @return t_buffer* Puntero al buffer que contiene la operacion query
  */
-t_buffer* serializar_operacion_read(t_operacion_read* operacion_read);
+t_buffer* serializar_operacion_query(t_operacion_query* operacion_query);
 
 
 /**
- * @brief Recibe un buffer y lo deserializa en una operacion read
+ * @brief Recibe un buffer y lo deserializa en una operacion query
  * 
- * @param buffer Puntero al buffer que contiene la operacion read
- * @return t_operacion_read* Puntero a la estructura de la operacion read
+ * @param buffer Puntero al buffer que contiene la operacion query
+ * @return t_operacion_query* Puntero a la estructura de la operacion query
  */
-t_operacion_read* deserializar_operacion_read(t_buffer* buffer);
+t_operacion_query* deserializar_operacion_query(t_buffer* buffer);
 
 /**
  * @brief Recibe el motivo de un END y lo serializa
@@ -329,9 +333,4 @@ t_buffer* serializar_query_completa(t_query_completa* master);
  */
 t_query_completa* deserializar_query_completa(t_buffer* buffer);
 
-
-
 #endif
-
-
-

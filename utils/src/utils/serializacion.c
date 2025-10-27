@@ -163,8 +163,15 @@ t_paquete* recibir_paquete(int socket){
 }
 
 void liberar_paquete(t_paquete* paquete){
-    free(paquete->buffer->stream);
-    free(paquete->buffer);
+    if (paquete == NULL) {
+        return;
+    }
+    if (paquete->buffer) { 
+        if (paquete->buffer->stream) {
+            free(paquete->buffer->stream);
+        }
+        free(paquete->buffer);
+    }
     free(paquete);
 }
 
@@ -191,23 +198,23 @@ t_query* deserializar_query(t_buffer* buffer){
 }
 
 
-t_buffer* serializar_operacion_read(t_operacion_read* operacion_read){
-    uint32_t tamanio = 3 * sizeof(uint32_t) + strlen(operacion_read->informacion) + 
-    strlen(operacion_read->file) + strlen(operacion_read->tag);
+t_buffer* serializar_operacion_query(t_operacion_query* operacion_query){
+    uint32_t tamanio = 3 * sizeof(uint32_t) + strlen(operacion_query->informacion) + 
+    strlen(operacion_query->file) + strlen(operacion_query->tag);
     t_buffer* buffer = buffer_create(tamanio);
-    buffer_add_string(buffer, strlen(operacion_read->informacion), operacion_read->informacion);
-    buffer_add_string(buffer, strlen(operacion_read->file), operacion_read->file);
-    buffer_add_string(buffer, strlen(operacion_read->tag), operacion_read->tag);
+    buffer_add_string(buffer, strlen(operacion_query->informacion), operacion_query->informacion);
+    buffer_add_string(buffer, strlen(operacion_query->file), operacion_query->file);
+    buffer_add_string(buffer, strlen(operacion_query->tag), operacion_query->tag);
     return buffer;
 }
 
-t_operacion_read* deserializar_operacion_read(t_buffer* buffer){
-    t_operacion_read* operacion_read = malloc(sizeof(t_operacion_read));
+t_operacion_query* deserializar_operacion_query(t_buffer* buffer){
+    t_operacion_query* operacion_query = malloc(sizeof(t_operacion_query));
     uint32_t length;
-    operacion_read->informacion = buffer_read_string(buffer, &length);
-    operacion_read->file = buffer_read_string(buffer, &length);
-    operacion_read->tag = buffer_read_string(buffer, &length);
-    return operacion_read;
+    operacion_query->informacion = buffer_read_string(buffer, &length);
+    operacion_query->file = buffer_read_string(buffer, &length);
+    operacion_query->tag = buffer_read_string(buffer, &length);
+    return operacion_query;
 }
 
 t_buffer* serializar_operacion_end(char* operacion_end){
