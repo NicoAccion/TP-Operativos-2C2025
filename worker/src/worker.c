@@ -249,7 +249,7 @@ void ejecutar_query(int query_id, const char* path_query, int socket_master, int
         }
         
         // Liberamos la memoria de los strings dentro de 'op'
-        destruir_operacion_query(&op);
+        //destruir_operacion_query(&op); ME SALE DOBLE LIBERACION
         
         log_info(logger_worker, "## Query %d: Instrucción realizada: %s", query_id, linea_copy);
         free(linea_copy); // Liberamos la copia para el log

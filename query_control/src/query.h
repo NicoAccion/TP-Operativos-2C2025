@@ -12,13 +12,4 @@
 
 void escuchar_master(int socket_master);
 
-void destruir_operacion_read(t_operacion_read* op) {
-    if (op == NULL) return;
-
-    free(op->informacion);
-    free(op->file);
-    free(op->tag);
-    free(op);
-}
-
 #endif

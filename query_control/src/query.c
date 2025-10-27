@@ -62,10 +62,10 @@ void escuchar_master(int socket_master) {
 
         switch(paquete->codigo_operacion){
             case READ:
-                t_operacion_read* operacion = deserializar_operacion_read(paquete->buffer);
+                t_operacion_query* operacion = deserializar_operacion_query(paquete->buffer);
                 log_info(logger_query, "## Lectura realizada: File %s:%s, contenido: %s",
                          operacion->file, operacion->tag, operacion->informacion);
-                destruir_operacion_read(operacion);
+                destruir_operacion_query(operacion);
                 liberar_paquete(paquete);
                 break;
 
