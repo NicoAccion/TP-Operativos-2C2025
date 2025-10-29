@@ -1,7 +1,6 @@
 #include "storage_conexiones.h"
 
 // Renombramos "atender_worker" a "gestionar_conexion_worker"
-// El código de adentro es IDÉNTICO al que ya teníamos.
 void* gestionar_conexion_worker(void* arg) {
     int socket_worker = *((int*) arg);
     free(arg);
@@ -39,7 +38,6 @@ void* gestionar_conexion_worker(void* arg) {
         
         t_op_storage* op_storage = deserializar_op_storage(paquete->buffer, paquete->codigo_operacion);
         
-        // (Aquí podríamos asignar el worker_id al op_storage si lo necesitáramos para los logs)
         // op_storage->worker_id = worker_id; 
 
         switch (paquete->codigo_operacion) {

@@ -8,12 +8,13 @@
 #include <stdio.h>
 #include "storage-configs.h"     // Para superblock_configs y storage_configs
 #include "storage-log.h"         // Para el logger_storage
+#include <dirent.h> // Para readdir/opendir (necesario para borrar)
 
 /**
  * @brief Ejecuta la lógica de creación de un File:Tag.
  * Valida si existe, crea directorios y metadata.config.
  * @param op Estructura con query_id, nombre_file y nombre_tag.
- * @return OP_OK si fue exitoso, OP_ERROR si falló (ej: ya existía).
+ * @return OP_OK si fue exitoso, OP_ERROR si falló 
  */
 t_codigo_operacion storage_op_create(t_op_storage* op);
 
@@ -48,6 +49,9 @@ t_codigo_operacion storage_op_commit(t_op_storage* op);
  * @return OP_OK si fue exitoso, OP_ERROR si falló.
  */
 t_codigo_operacion storage_op_tag(t_op_storage* op);
+
+//fucniones aux
+char* build_blocks_string(char** bloques_actuales, int count_actual, int count_nuevo);
 
 // ... (Aquí irían las de READ y WRITE) ...
 
