@@ -36,6 +36,7 @@ typedef enum {
     DELETE = 8,
     COMMIT = 9,
     TAG = 10,
+    WRITE=11,
     //Codigos de respuesta del storage
     HANDSAHKE_STORAGE_RTA,
     OP_OK,
@@ -335,5 +336,51 @@ t_query_completa* deserializar_query_completa(t_buffer* buffer);
 
 
 void destruir_operacion_query(t_operacion_query* op);
+
+
+/*/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+                            Funciones de serializacion y deserializacion (Worker <-> Storage)
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
+
+/**
+ * @struct t_op_storage
+ * @brief Estructura genérica para todas las operaciones que el Worker solicita al Storage.
+ * NO todos los campos se usan en TODAS las operaciones.
+ */
+typedef struct {
+    uint32_t query_id;
+    char* nombre_file;
+    char* nombre_tag;
+    uint32_t tamano; // Para TRUNCATE y READ
+    uint32_t direccion_base; // Para WRITE y READ
+    char* contenido; // Para WRITE
+    char* nombre_file_destino; // Para TAG
+    char* nombre_tag_destino; // Para TAG
+} t_op_storage;
+
+
+/**
+ * @brief Serializa una operacion genérica de Storage
+ * @param op Puntero a la estructura t_op_storage
+ * @param codigo_operacion El código (CREATE, TRUNCATE, etc.) para saber qué campos serializar
+ * @return t_buffer* Puntero al buffer serializado
+ */
+t_buffer* serializar_op_storage(t_op_storage* op, t_codigo_operacion codigo_operacion);
+
+/**
+ * @brief Deserializa una operacion genérica de Storage
+ * @param buffer Puntero al buffer
+ * @param codigo_operacion El código (CREATE, TRUNCATE, etc.) para saber qué campos deserializar
+ * @return t_op_storage* Puntero a la nueva estructura
+ */
+t_op_storage* deserializar_op_storage(t_buffer* buffer, t_codigo_operacion codigo_operacion);
+
+/**
+ * @brief Libera la memoria de una t_op_storage
+ */
+void destruir_op_storage(t_op_storage* op);
+
 
 #endif
