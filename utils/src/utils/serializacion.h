@@ -41,6 +41,7 @@ typedef enum {
     HANDSAHKE_STORAGE_RTA,
     OP_OK,
     OP_ERROR,
+    READ_RTA,
 } t_codigo_operacion;
 
 

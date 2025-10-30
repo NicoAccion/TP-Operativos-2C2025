@@ -9,7 +9,9 @@
 void ejecutar_query(int query_id, const char* path_query, int socket_master, int socket_storage);
 void enviar_operacion_storage_mock(int socket_storage, t_codigo_operacion op_code, const char* arg1, const char* arg2);
 void enviar_operacion_storage_simple(int socket_storage, t_codigo_operacion op_code, const char* arg1);
-t_codigo_operacion enviar_op_a_storage(int socket_storage, t_codigo_operacion op_code, t_op_storage* op);
+t_codigo_operacion enviar_op_simple_storage(int socket_storage, t_codigo_operacion op_code, t_op_storage* op);
+char* enviar_op_read_storage(int socket_storage, t_op_storage* op);
+
 
 
 int main(int argc, char* argv[]) {
@@ -154,7 +156,7 @@ if (strcmp(instruccion, "CREATE") == 0) {
                 op_create->nombre_tag  = strdup(strtok(NULL, ":"));
 
                 // 3. Llamamos a la nueva función
-                enviar_op_a_storage(socket_storage, CREATE, op_create);
+                enviar_op_simple_storage(socket_storage, CREATE, op_create);
                 // (op_create se libera dentro de la función)
                 
                 free(file_tag_copy);
@@ -176,7 +178,7 @@ if (strcmp(instruccion, "CREATE") == 0) {
                 op_truncate->tamano = atoi(tamanio_str); // Convertimos a int
 
                 // 3. Llamamos
-                enviar_op_a_storage(socket_storage, TRUNCATE, op_truncate);
+                enviar_op_simple_storage(socket_storage, TRUNCATE, op_truncate);
 
                 free(file_tag_copy);
             }
@@ -201,7 +203,7 @@ if (strcmp(instruccion, "CREATE") == 0) {
                 op_tag->nombre_tag_destino  = strdup(strtok(NULL, ":"));
                 free(file_tag_copy);
 
-                enviar_op_a_storage(socket_storage, TAG, op_tag);
+                enviar_op_simple_storage(socket_storage, TAG, op_tag);
             }
 
         } else if (strcmp(instruccion, "COMMIT") == 0) {
@@ -216,7 +218,7 @@ if (strcmp(instruccion, "CREATE") == 0) {
                 op_commit->nombre_tag  = strdup(strtok(NULL, ":"));
                 free(file_tag_copy);
 
-                enviar_op_a_storage(socket_storage, COMMIT, op_commit);
+                enviar_op_simple_storage(socket_storage, COMMIT, op_commit);
              }
 
         } else if (strcmp(instruccion, "DELETE") == 0) {
@@ -231,45 +233,73 @@ if (strcmp(instruccion, "CREATE") == 0) {
                 op_delete->nombre_tag  = strdup(strtok(NULL, ":"));
                 free(file_tag_copy);
                 
-                enviar_op_a_storage(socket_storage, DELETE, op_delete);
+                enviar_op_simple_storage(socket_storage, DELETE, op_delete);
             }
 
         } else if (strcmp(instruccion, "WRITE") == 0) {
-            // Aun no habla con storage con write
             char* file_tag = strtok(NULL, " ");
             char* direccion = strtok(NULL, " ");
-            char* contenido = strtok(NULL, ""); // Captura el resto de la línea
+            char* contenido = strtok(NULL, ""); 
             
             if(file_tag && direccion && contenido) {
-                char* file_tag_copy = strdup(file_tag);
-                char* file = strtok(file_tag_copy, ":");
-                char* tag = strtok(NULL, ":");
+                // (LOGICA DE MEMORIA)
+                // escribir_en_memoria(query_id, file, tag, atoi(direccion), contenido);
                 
-                escribir_en_memoria(query_id, file, tag, atoi(direccion), contenido);
+                // (Asumimos que 'direccion' es el 'nro_bloque_logico' para esta prueba)
+                t_op_storage* op_write = calloc(1, sizeof(t_op_storage));
+                op_write->query_id = query_id;
+                
+                file_tag_copy = strdup(file_tag);
+                op_write->nombre_file = strdup(strtok(file_tag_copy, ":"));
+                op_write->nombre_tag  = strdup(strtok(NULL, ":"));
                 free(file_tag_copy);
+                
+                op_write->direccion_base = atoi(direccion); // nro_bloque_logico
+                op_write->contenido = strdup(contenido);
+                
+                enviar_op_simple_storage(socket_storage, WRITE, op_write);
             }
 
+        // --- READ ---
         } else if (strcmp(instruccion, "READ") == 0) {
-            //aun no habla con storage si hay read
             char* file_tag = strtok(NULL, " ");
             char* direccion = strtok(NULL, " ");
             char* tamanio = strtok(NULL, " ");
             
             if(file_tag && direccion && tamanio) {
-                char* file_tag_copy = strdup(file_tag);
-                char* file = strtok(file_tag_copy, ":");
-                char* tag = strtok(NULL, ":");
+                // (LOGICA DE MEMORIA)
+                // char* valor_leido = leer_de_memoria(...)
                 
-                char* valor_leido = leer_de_memoria(query_id, file, tag, atoi(direccion), atoi(tamanio));
+                t_op_storage* op_read_req = calloc(1, sizeof(t_op_storage));
+                op_read_req->query_id = query_id;
                 
-                // Usamos una struct temporal para enviar al Master
-                t_operacion_query op_read = {.file = file, .tag = tag, .informacion = valor_leido};
-                t_buffer* buffer_read = serializar_operacion_query(&op_read);
-                t_paquete* paquete_read = empaquetar_buffer(READ, buffer_read);
-                enviar_paquete(socket_master, paquete_read);
-
-                free(valor_leido);
+                file_tag_copy = strdup(file_tag);
+                op_read_req->nombre_file = strdup(strtok(file_tag_copy, ":"));
+                op_read_req->nombre_tag  = strdup(strtok(NULL, ":"));
                 free(file_tag_copy);
+                
+                op_read_req->direccion_base = atoi(direccion); // nro_bloque_logico
+                op_read_req->tamano = atoi(tamanio); // (No lo usamos en el Storage, pero lo pasamos)
+
+                char* valor_leido = enviar_op_read_storage(socket_storage, op_read_req);
+                
+                if (valor_leido != NULL) {
+                    // Usamos una struct temporal para enviar al Master
+                    // (Esta parte estaba bien)
+                    t_operacion_query op_read_rta;
+                    op_read_rta.file = strdup(op_read_req->nombre_file); // Reusamos el dato
+                    op_read_rta.tag = strdup(op_read_req->nombre_tag);   // Reusamos el dato
+                    op_read_rta.informacion = valor_leido; // El contenido que leímos
+                    
+                    t_buffer* buffer_read = serializar_operacion_query(&op_read_rta);
+                    t_paquete* paquete_read = empaquetar_buffer(READ, buffer_read);
+                    enviar_paquete(socket_master, paquete_read);
+
+                    // Liberamos la struct temporal
+                    free(op_read_rta.file);
+                    free(op_read_rta.tag);
+                    free(op_read_rta.informacion); // (valor_leido)
+                }
             }
 
         } else if (strcmp(instruccion, "FLUSH") == 0) {
@@ -294,27 +324,69 @@ if (strcmp(instruccion, "CREATE") == 0) {
     fclose(archivo);
 }
 
-t_codigo_operacion enviar_op_a_storage(int socket_storage, t_codigo_operacion op_code, t_op_storage* op) {
+/**
+ * @brief Envía una operación simple (CREATE, WRITE, TRUNCATE, etc.)
+ * y espera una respuesta OK/ERROR.
+ */
+t_codigo_operacion enviar_op_simple_storage(int socket_storage, t_codigo_operacion op_code, t_op_storage* op) {
     
-    // 1. Serializa usando la función CORRECTA
+    // 1. Serializa y empaqueta
     t_buffer* buffer = serializar_op_storage(op, op_code);
     t_paquete* paquete = empaquetar_buffer(op_code, buffer);
     
     // 2. Enviamos el paquete
     enviar_paquete(socket_storage, paquete);
 
-    // 3. Liberamos la estructura 'op' que creamos (ya está en el buffer)
+    // 3. Liberamos la struct
     destruir_op_storage(op);
 
     // 4. Esperamos respuesta (OK/ERROR)
     t_paquete* paquete_rta = recibir_paquete(socket_storage);
     if (paquete_rta == NULL) {
         log_error(logger_worker, "Storage se desconectó inesperadamente.");
-        return OP_ERROR; // Devolvemos error
+        return OP_ERROR; 
     }
 
     t_codigo_operacion rta_code = paquete_rta->codigo_operacion;
     log_info(logger_worker, "Recibida confirmación del Storage (op_code: %d)", rta_code);
     liberar_paquete(paquete_rta);
     return rta_code;
+}
+
+/**
+ * @brief Envía una operación READ al Storage y espera un paquete READ_RTA
+ * con el contenido.
+ * @return El contenido leído (char*), o NULL si falló.
+ */
+char* enviar_op_read_storage(int socket_storage, t_op_storage* op) {
+    
+    // 1. Serializa y empaqueta (con op_code READ)
+    t_buffer* buffer = serializar_op_storage(op, READ);
+    t_paquete* paquete = empaquetar_buffer(READ, buffer);
+    
+    enviar_paquete(socket_storage, paquete);
+    destruir_op_storage(op);
+
+    // 2. Esperamos respuesta (debe ser READ_RTA)
+    t_paquete* paquete_rta = recibir_paquete(socket_storage);
+    if (paquete_rta == NULL) {
+        log_error(logger_worker, "Storage se desconectó (esperando READ_RTA).");
+        return NULL;
+    }
+
+    if (paquete_rta->codigo_operacion != READ_RTA) {
+        log_error(logger_worker, "Error del Storage: se esperaba READ_RTA (op_code: %d)", paquete_rta->codigo_operacion);
+        liberar_paquete(paquete_rta);
+        return NULL;
+    }
+
+    // 3. Deserializamos y devolvemos el contenido
+    t_op_storage* op_rta = deserializar_op_storage(paquete_rta->buffer, READ_RTA);
+    
+    char* contenido = string_duplicate(op_rta->contenido); // Copiamos el contenido
+    
+    destruir_op_storage(op_rta);
+    liberar_paquete(paquete_rta);
+    
+    return contenido;
 }

@@ -4,11 +4,18 @@
 #include <utils/serializacion.h> // Para t_op_storage y t_codigo_operacion
 #include <commons/string.h>
 #include <commons/config.h>
+#include <commons/crypto.h>
 #include <sys/stat.h> // Para mkdir
 #include <stdio.h>
 #include "storage-configs.h"     // Para superblock_configs y storage_configs
 #include "storage-log.h"         // Para el logger_storage
 #include <dirent.h> // Para readdir/opendir (necesario para borrar)
+#include <stdbool.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <string.h>
+
 
 /**
  * @brief Ejecuta la lógica de creación de un File:Tag.
@@ -52,7 +59,15 @@ t_codigo_operacion storage_op_tag(t_op_storage* op);
 
 //fucniones aux
 char* build_blocks_string(char** bloques_actuales, int count_actual, int count_nuevo);
+void chequear_y_liberar_bloque_fisico(int query_id, char* nro_bloque_fisico_str);
+char* array_to_blocks_string(char** bloques_array, int count); //seria como un string_join
 
+void escribir_en_bloque_fisico(char* path_bloque_fisico, char* contenido, int block_size);
+int encontrar_bloque_libre_mock(int query_id);
 // ... (Aquí irían las de READ y WRITE) ...
+
+t_codigo_operacion storage_op_write(t_op_storage* op);
+// Esta función devuelve el contenido leído por un "out-parameter" (char**)
+t_codigo_operacion storage_op_read(t_op_storage* op, char** contenido_leido);
 
 #endif

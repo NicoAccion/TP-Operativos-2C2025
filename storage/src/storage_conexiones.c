@@ -62,7 +62,38 @@ void* gestionar_conexion_worker(void* arg) {
                 op_respuesta = storage_op_tag(op_storage);
                 break;
             
-            // --- Falta READ y WRITE---
+            case WRITE:
+                op_respuesta = storage_op_write(op_storage);
+                break; // Se enviará OP_OK u OP_ERROR
+
+            case READ: {
+                char* contenido_leido = NULL;
+                op_respuesta = storage_op_read(op_storage, &contenido_leido);
+
+                if (op_respuesta == OP_OK) {
+                    // --- Enviar respuesta de LECTURA ---
+                    // Creamos una op de storage temporal para la respuesta
+                    t_op_storage op_rta;
+                    op_rta.contenido = contenido_leido; 
+                    
+                    t_buffer* buffer_rta = serializar_op_storage(&op_rta, READ_RTA);
+                    t_paquete* paq_rta = empaquetar_buffer(READ_RTA, buffer_rta);
+                    enviar_paquete(socket_worker, paq_rta);
+                    
+                    free(contenido_leido);
+                    
+                    // Liberamos y saltamos la respuesta OK/ERROR default
+                    destruir_op_storage(op_storage);
+                    liberar_paquete(paquete);
+                    continue; // Ya enviamos nuestra respuesta
+                    
+                } else {
+                    // Hubo un error en storage_op_read,
+                    // 'break' para que se envíe el OP_ERROR
+                    free(contenido_leido); // (será NULL, pero por las dudas)
+                    break; 
+                }
+            }
 
             default:
                 log_warning(logger_storage, "Operación desconocida recibida (op_code: %d).", paquete->codigo_operacion);

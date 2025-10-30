@@ -319,7 +319,7 @@ t_buffer* serializar_op_storage(t_op_storage* op, t_codigo_operacion codigo_oper
             break;
 
         case WRITE: // [query_id, file, tag, dir_base, contenido]
-            buffer = buffer_create(sizeof(uint32_t) * 4 + len_file + len_tag + len_contenido);
+            buffer = buffer_create(sizeof(uint32_t) * 5 + len_file + len_tag + len_contenido);
             buffer_add_uint32(buffer, op->query_id);
             buffer_add_string(buffer, len_file, op->nombre_file);
             buffer_add_string(buffer, len_tag, op->nombre_tag);
@@ -351,6 +351,13 @@ t_buffer* serializar_op_storage(t_op_storage* op, t_codigo_operacion codigo_oper
             buffer_add_uint32(buffer, op->query_id);
             buffer_add_string(buffer, len_file, op->nombre_file);
             buffer_add_string(buffer, len_tag, op->nombre_tag);
+            break;
+        
+        case READ_RTA: //
+            // Asumimos que el contenido es un string
+            if (op->contenido) len_contenido = strlen(op->contenido) + 1;
+            buffer = buffer_create(sizeof(uint32_t) + len_contenido);
+            buffer_add_string(buffer, len_contenido, op->contenido);
             break;
 
         default:
@@ -411,6 +418,10 @@ t_op_storage* deserializar_op_storage(t_buffer* buffer, t_codigo_operacion codig
             op->query_id = buffer_read_uint32(buffer);
             op->nombre_file = buffer_read_string(buffer, &len);
             op->nombre_tag = buffer_read_string(buffer, &len);
+            break;
+
+        case READ_RTA: // 
+            op->contenido = buffer_read_string(buffer, &len);
             break;
         
         default:
