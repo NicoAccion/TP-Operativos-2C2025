@@ -73,7 +73,7 @@ void escribir_en_memoria(int query_id, const char* file, const char* tag, int di
     int direccion_fisica = (marco * tam_pagina) + offset;
     memcpy(memoria_principal + direccion_fisica, contenido, strlen(contenido) + 1);
 
-    usleep(worker_configs.retardomemoria * 1000);
+    //usleep(worker_configs.retardomemoria * 1000);
 
     log_info(logger_worker, "## Query %d: Acción: ESCRIBIR - Dirección Física: %d - Valor: %s",
              query_id, direccion_fisica, contenido);
@@ -109,7 +109,7 @@ char* leer_de_memoria(int query_id, const char* file, const char* tag, int direc
              query_id, file, tag, num_pagina, marco);
 
     int direccion_fisica = (marco * tam_pagina) + offset;
-    usleep(worker_configs.retardomemoria * 1000);
+    //usleep(worker_configs.retardomemoria * 1000);
 
     // Creamos un buffer para devolver el contenido leído.
     char* valor_leido = malloc(tamanio + 1);

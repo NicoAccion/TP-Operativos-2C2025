@@ -13,6 +13,8 @@
         "atender-hilos.h": "c",
         "master.h": "c",
         "master-configs.h": "c",
-        "serializacion.h": "c"
+        "serializacion.h": "c",
+        "pthread.h": "c",
+        "stdint.h": "c"
     }
 }

@@ -2,13 +2,21 @@
 #define MASTER_H_
 
 #include <commons/string.h>
-#include <pthread.h>
 
-#include "master-configs.h"
-#include "master-log.h"
 #include "planificacion.h"
 #include "atender-hilos.h"
 
-void* servidor_general();
+/*//////////////////////////////////////////////////////////////////////////////////////////////////
+
+                                        Prototipos de funciones
+
+//////////////////////////////////////////////////////////////////////////////////////////////////*/
+
+/**
+ * @brief Hilo que escucha las conexiones con el master
+ * 
+ * @return void*: Un NULL
+ */
+void* servidor_general(void);
 
 #endif

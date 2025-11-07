@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) {
             break;
         }
 
-        if (paquete_query->codigo_operacion == PAQUETE_QUERY_COMPLETA) {
+        if (paquete_query->codigo_operacion == PAQUETE_QUERY_EJECUCION) {
             uint32_t len;
             char* path_query = buffer_read_string(paquete_query->buffer, &len);
             

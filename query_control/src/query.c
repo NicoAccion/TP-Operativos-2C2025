@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
 
     //Cargo los argumentos en variables
     char* path_config = argv[1];
-    char* path_query = realpath(argv[2], NULL);
+    char* path_query = argv[2];
     uint32_t prioridad = atoi(argv[3]);
     
     //Inicializo las configs de Query Control
@@ -83,4 +83,3 @@ void escuchar_master(int socket_master) {
         }
     }
 }
-
