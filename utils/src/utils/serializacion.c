@@ -73,7 +73,10 @@ char *buffer_read_string(t_buffer *buffer, uint32_t *length) {
 t_paquete* empaquetar_buffer(t_codigo_operacion codigo_operacion, t_buffer* buffer) {
     t_paquete* paquete = malloc(sizeof(t_paquete));
     paquete->codigo_operacion = codigo_operacion;
-    paquete->buffer = buffer;
+    if (buffer != NULL)
+        paquete->buffer = buffer;
+    else
+        paquete->buffer = buffer_create(0); // buffer vacío válido
     return paquete;
 }
 
@@ -231,8 +234,7 @@ char* deserializar_operacion_end(t_buffer* buffer){
 }
 
 t_buffer* serializar_worker(uint32_t id) {
-    uint32_t tamanio = sizeof(uint32_t);
-    t_buffer* buffer = buffer_create(tamanio);
+    t_buffer* buffer = buffer_create(sizeof(uint32_t));
     buffer_add_uint32(buffer, id);
     return buffer;
 }
@@ -243,25 +245,24 @@ uint32_t deserializar_worker(t_buffer* buffer) {
 }
 
 
-t_buffer* serializar_query_completa(t_query_completa* query_completa){
-    uint32_t tamanio = 4 * sizeof(uint32_t) + strlen(query_completa->archivo_query);
+t_buffer* serializar_query_ejecucion(t_query_ejecucion* query){
+    uint32_t tamanio = 3 * sizeof(uint32_t) + strlen(query->archivo_query);
     t_buffer* buffer = buffer_create(tamanio);
-    buffer_add_string(buffer, strlen(query_completa->archivo_query), query_completa->archivo_query);
-    buffer_add_uint32(buffer, query_completa->prioridad);
-    buffer_add_uint32(buffer, query_completa->id_query);
-    buffer_add_uint32(buffer, query_completa->estado);
+    buffer_add_string(buffer, strlen(query->archivo_query), query->archivo_query);
+    buffer_add_uint32(buffer, query->id_query);
+    buffer_add_uint32(buffer, query->program_counter);    
     return buffer;
 }
 
-t_query_completa* deserializar_query_completa(t_buffer* buffer){
-    t_query_completa* query_completa = malloc(sizeof(t_query_completa));
+t_query_ejecucion* deserializar_query_ejecucion(t_buffer* buffer){
+    t_query_ejecucion* query = malloc(sizeof(t_query_ejecucion));
     uint32_t length;
-    query_completa->archivo_query = buffer_read_string(buffer, &length);
-    query_completa->prioridad = buffer_read_uint32(buffer);
-    query_completa->id_query = buffer_read_uint32(buffer);
-    query_completa->estado = buffer_read_uint32(buffer);
-    return query_completa;
+    query->archivo_query = buffer_read_string(buffer, &length);
+    query->id_query = buffer_read_uint32(buffer);
+    query->program_counter = buffer_read_uint32(buffer);
+    return query;
 }
+
 
 void destruir_operacion_query(t_operacion_query* op) {
     if (op == NULL) return;

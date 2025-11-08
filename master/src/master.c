@@ -14,17 +14,14 @@ int main(int argc, char* argv[]) {
 
     // 3. Inicialización de Estructuras Globales
     inicializar_estructuras_globales();
-    log_info(logger_master, "Estructuras globales inicializadas.");
 
     // 4. Lanzamiento de Hilos Principales
     pthread_t hilo_servidor;
     pthread_t hilo_planificador;
 
     pthread_create(&hilo_servidor, NULL, (void*) servidor_general, NULL);
-    log_info(logger_master, "Hilo de servidor para conexiones lanzado.");
 
     pthread_create(&hilo_planificador, NULL, (void*) planificar, NULL);
-    log_info(logger_master, "Hilo de planificación lanzado.");
 
     // 5. Esperar a que los hilos terminen (en este caso, nunca)
     pthread_join(hilo_servidor, NULL);
