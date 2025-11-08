@@ -38,6 +38,7 @@ typedef enum {
     TAG = 10,
     DESCONEXION_QUERY = 11,
     DESALOJO_PRIORIDADES = 12,
+    WRITE = 13,
     //Codigos de respuesta del storage
     HANDSAHKE_STORAGE_RTA,
     OP_OK,

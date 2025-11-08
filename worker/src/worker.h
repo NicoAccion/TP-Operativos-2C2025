@@ -7,8 +7,9 @@
 #include <utils/serializacion.h>
 #include "worker-configs.h"
 #include "worker-log.h"
+#include <worker_interpreter.h>
+#include "worker_memoria.h"
 
-
-void enviar_operacion_storage(int socket_storage, t_codigo_operacion op_code, t_operacion_query* op_query);
+//Se podria limpiar aun mas el worker.c
 
 #endif
