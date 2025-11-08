@@ -93,11 +93,9 @@ int main(int argc, char* argv[]) {
             log_info(logger_worker, "## Query %d: Se recibe la Query. El path de operaciones es: %s", 
                      query_recibida->id_query, query_recibida->archivo_query);
 
-            // 3. Ejecutamos usando el id_query real
-            ejecutar_query(query_recibida->id_query, 
-                           query_recibida->archivo_query, 
-                           socket_master, 
-                           socket_storage);
+        if (paquete_query->codigo_operacion == PAQUETE_QUERY_EJECUCION) {
+            uint32_t len;
+            char* path_query = buffer_read_string(paquete_query->buffer, &len);
             
             // 4. Liberamos la estructura
             free(query_recibida->archivo_query);

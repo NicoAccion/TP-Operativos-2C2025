@@ -28,7 +28,7 @@
 typedef enum {
     HANDSHAKE_QUERYCONTROL = 1,
     HANDSHAKE_WORKER = 2,
-    PAQUETE_QUERY_COMPLETA = 3,
+    PAQUETE_QUERY_EJECUCION = 3,
     READ = 4,
     END = 5,
     CREATE = 6,
@@ -36,7 +36,8 @@ typedef enum {
     DELETE = 8,
     COMMIT = 9,
     TAG = 10,
-    WRITE=11,
+    DESCONEXION_QUERY = 11,
+    DESALOJO_PRIORIDADES = 12,
     //Codigos de respuesta del storage
     HANDSAHKE_STORAGE_RTA,
     OP_OK,
@@ -110,27 +111,24 @@ typedef struct {
  * @param EXIT: La query se encuentra en estado EXIT
  */
 typedef enum {
-    READY = 1,
-    EXEC = 2,
-    EXIT = 3,
+    READY,
+    EXEC,
+    EXIT,
 } t_estado;
 
 /**
- * @struct t_query_completa
- * @brief Estructura que representa una query completa
+ * @struct t_query_ejecucion
+ * @brief Estructura que representa una query en ejecucion
  * 
  * @param archivo_query: path del archivo de la query
- * @param prioridad: prioridad de la query
  * @param id_query: id de la query
- * @param estado: estado de la query
+ * @param program_counter: program counter de la query
  */
 typedef struct {
-    uint32_t socket_cliente;
     char* archivo_query;
-    uint32_t prioridad;
     uint32_t id_query;
-    t_estado estado;
-} t_query_completa;
+    uint32_t program_counter; 
+} t_query_ejecucion;
 
 
 /*/////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -197,7 +195,7 @@ char *buffer_read_string(t_buffer *buffer, uint32_t *length);
 
 /*/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-                                        Funciones de empaquetado y desempaquetado
+                                    Funciones de empaquetado y desempaquetado
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
 
@@ -206,7 +204,7 @@ t_paquete* empaquetar_buffer(t_codigo_operacion codigo_operacion, t_buffer* buff
 
 /*/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-                                        Funciones de armado de streams
+                                            Funciones de armado de streams
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
 
@@ -215,7 +213,7 @@ void* stream_para_enviar(t_paquete* paquete);
 
 /*/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-                                        Funciones de enviado y recepcion de paquetes
+                                    Funciones de enviado y recepcion de paquetes
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
 
@@ -320,20 +318,20 @@ uint32_t deserializar_worker(t_buffer* buffer);
 
 
 /**
- * @brief Recibe una t_query_completa y la serializa
+ * @brief Recibe una t_query_ejecucion y la serializa
  * 
- * @param master Puntero a la estructura de la t_query_completa
- * @return t_buffer* Puntero al buffer que contiene la t_query_completa
+ * @param query Puntero a la estructura t_query_ejecucion
+ * @return t_buffer* Puntero al buffer que contiene la t_query_ejecucion
  */
-t_buffer* serializar_query_completa(t_query_completa* master);
+t_buffer* serializar_query_ejecucion(t_query_ejecucion* query);
 
 /**
- * @brief Recibe un buffer y lo deserializa en una t_query_completa
+ * @brief Recibe un buffer y lo deserializa en una t_query_ejecucion
  * 
- * @param buffer Puntero al buffer que contiene la t_query_completa
- * @return t_query_completa* Puntero a la estructura de la t_query_completa
+ * @param buffer Puntero al buffer que contiene la t_query_ejecucion
+ * @return t_query_ejecucion* Puntero a la estructura t_query_ejecucion
  */
-t_query_completa* deserializar_query_completa(t_buffer* buffer);
+t_query_ejecucion* deserializar_query_ejecucion(t_buffer* buffer);
 
 
 void destruir_operacion_query(t_operacion_query* op);
