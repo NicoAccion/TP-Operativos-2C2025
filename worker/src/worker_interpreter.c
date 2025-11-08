@@ -71,13 +71,28 @@ void ejecutar_query(int query_id, const char* path_query, uint32_t program_count
     uint32_t pc_actual = 0;
     bool fin = false;
 
-// --- Lógica de Program Counter ---
+    // --- Lógica de Program Counter ---
     // Adelantamos el archivo hasta la línea que nos dijo el Master
     while (pc_actual < program_counter && fgets(linea, sizeof(linea), archivo)) {
         pc_actual++;
     }
 
     while (!fin && fgets(linea, sizeof(linea), archivo)) {
+
+         if (desalojar_actual) {
+        log_info(logger_worker, "## Query %d: Desalojo solicitado (PC=%d)", query_actual_id, pc_actual);
+
+        // paquete con el Program Counter actual
+        t_buffer* buffer_pc = serializar_pc(query_actual_id, pc_actual);
+        t_paquete* paquete_pc = empaquetar_buffer(DESALOJO_PRIORIDADES, buffer_pc);
+        enviar_paquete(socket_master, paquete_pc);
+
+        desalojar_actual = false;
+        ejecutando_query = false;
+        fclose(archivo);
+        return;  // Termina la ejecución sin marcar fin de Query
+        }
+
         linea[strcspn(linea, "\r\n")] = 0; 
         if (strlen(linea) == 0) continue; 
 

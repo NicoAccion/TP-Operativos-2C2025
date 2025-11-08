@@ -5,6 +5,11 @@
 #include <string.h>
 #include <unistd.h>
 
+    uint32_t query_actual_id = 0;
+    uint32_t query_actual_pc = 0;
+    bool ejecutando_query = false;
+    bool desalojar_actual = false;
+
 
 int main(int argc, char* argv[]) {
     if (argc != 3) {
@@ -17,6 +22,8 @@ int main(int argc, char* argv[]) {
     inicializar_configs(path_config);
     inicializar_logger_worker(worker_configs.loglevel);
     log_info(logger_worker, "## Worker %d inicializado", id_worker);
+
+
 
 // ===== Conexión con Storage =====
     char* puerto_storage_str = string_itoa(worker_configs.puertostorage);
@@ -104,21 +111,69 @@ int main(int argc, char* argv[]) {
             
             // --- DESALOJO POR PRIORIDAD ---
             case DESALOJO_PRIORIDADES: {
-                log_warning(logger_worker, "## Solicitud de DESALOJO por PRIORIDAD recibida. (No implementado)");
-                // TODO: 
-                // 1. Pausar la ejecución de `ejecutar_query` (requiere hilos)
+                /*   
+                Las Queries se enviarán a ejecutar según su prioridad, siendo 0 la prioridad más alta (a mayor número, menor prioridad). 
+                En caso que los Workers estuvieran ocupados y una Query nueva tuviera más prioridad que alguna de las que estuviera en ejecución, deberá ser desalojada aquella que tuviera la menor prioridad.
+                Para desalojar una Query de un Worker, se deberá solicitar al Worker su desalojo. Este último le devolverá al Master el Program Counter (PC) para que éste luego sepa desde dónde reanudarlo. 
+                Al momento de volver a planificar una Query previamente desalojada, se deberá enviar el PC previamente recibido para poder retomar en el lugar correcto.
+                */
+
+                // 1. Pausar la ejecución de `ejecutar_query`
                 // 2. Obtener el PC actual.
                 // 3. Serializar t_query_ejecucion con el PC actualizado.
-                // 4. Enviar paquete DESALOJO_PRIORIDADES de vuelta al Master.
+                // 4. Enviar paquete DESALOJO_PRIORIDADES de vuelta al Master. 
+
+                log_warning(logger_worker, "## Solicitud de DESALOJO por PRIORIDAD recibida.");
+                
+                desalojar_actual = true; // marcar para que ejecutar_query lo detecte
+
+                ejecutar_query(query_recibida->id_query, 
+                               query_recibida->archivo_query, 
+                               query_recibida->program_counter, // Pasamos el PC
+                               socket_master, 
+                               socket_storage);
+                
                 break;
             }
 
             // --- DESCONEXIÓN DE QUERY CONTROL ---
             case DESCONEXION_QUERY: {
-                log_warning(logger_worker, "## Solicitud de DESALOJO por DESCONEXIÓN recibida. (No implementado)");
+                /*
+                Ante la desconexión de un módulo Query Control, la Query enviada por el mismo deberá cancelarse.
+                En el caso de que la Query se encuentre en READY, la misma se deberá enviar a EXIT directamente.
+                En caso de que la Query se encuentre en EXEC, previamente se deberá notificar al Worker que la está
+                ejecutando que debe desalojar dicha Query. Una vez recibido su contexto se enviará la Query a EXIT.
+                */
+
+                log_warning(logger_worker, "## Solicitud de DESALOJO por DESCONEXIÓN recibida.");
+
                 // TODO: 
                 // 1. Pausar/Cancelar la ejecución de `ejecutar_query`
                 // 2. Enviar paquete END al Master con motivo "DESCONEXION QUERY"
+
+                // Deserializar el ID de la query desconectada
+                uint32_t id_query_desconectada = buffer_read_uint32(paquete_master->buffer);
+                log_info(logger_worker, "Query %d desconectada por su Query Control.", id_query_desconectada);
+
+                // Verificar si es la Query en ejecución
+                if (ejecutando_query && id_query_desconectada == query_actual_id) {
+                    log_info(logger_worker, "Cancelando ejecución actual de Query %d por desconexión.", id_query_desconectada);
+
+                    ejecutando_query = false;
+                    query_actual_id = 0;
+                } else {
+                    log_info(logger_worker, "La Query %d no estaba en ejecución.", id_query_desconectada);
+                }
+
+                // Notificar al Master que la Query finalizó por desconexión
+                t_buffer* buffer_end = buffer_create(sizeof(uint32_t));
+                buffer_write_uint32(buffer_end, id_query_desconectada);
+
+                t_paquete* paquete_end = empaquetar_buffer(END, buffer_end);
+                enviar_paquete(socket_master, paquete_end);
+
+                log_info(logger_worker, "Query %d deberá ser enviada a EXIT (motivo: desconexión del Query Control).", id_query_desconectada);
+
                 break;
             }
 
