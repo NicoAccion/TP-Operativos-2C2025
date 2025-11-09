@@ -2,6 +2,7 @@
 #define WORKER_MEMORIA_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #define MAX_FILETAG 128
 
@@ -13,13 +14,14 @@ typedef struct {
     char file[MAX_FILETAG];
     char tag[MAX_FILETAG];
     int num_pagina;
+    bool bit_clock; // Para CLOCK-M
 } PaginaMemoria;
 
 void inicializar_memoria(int tam_memoria, int tam_pagina);
 void liberar_memoria();
 
 // Funciones principales de acceso
-void escribir_en_memoria(int query_id, const char* file, const char* tag, int direccion_logica, const char* contenido);
-char* leer_de_memoria(int query_id, const char* file, const char* tag, int direccion_logica, int tamanio);
+void escribir_en_memoria(int query_id, const char* file, const char* tag, int direccion_logica, const char* contenido,   int socket_storage);
+char* leer_de_memoria(int query_id, const char* file, const char* tag, int direccion_logica, int tamanio, int socket_storage);
 
 #endif

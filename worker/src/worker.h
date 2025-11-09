@@ -10,6 +10,5 @@
 #include <worker_interpreter.h>
 #include "worker_memoria.h"
 
-//Se podria limpiar aun mas el worker.c
 
 #endif

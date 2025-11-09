@@ -39,9 +39,11 @@ int main(int argc, char* argv[]) {
     t_buffer* buffer_id_storage = serializar_worker(id_worker);
     t_paquete* paquete_handshake_storage = empaquetar_buffer(HANDSHAKE_WORKER, buffer_id_storage);
     enviar_paquete(socket_storage, paquete_handshake_storage);
+    liberar_paquete(paquete_handshake_storage);
 
     // 2. Recibir BLOCK_SIZE de Storage
     t_paquete* rta_handshake_storage = recibir_paquete(socket_storage);
+
     if (rta_handshake_storage == NULL || rta_handshake_storage->codigo_operacion != HANDSAHKE_STORAGE_RTA) {
         log_error(logger_worker, "Error en handshake con Storage. Storage desconectado.");
         if(rta_handshake_storage) liberar_paquete(rta_handshake_storage);
@@ -72,7 +74,8 @@ int main(int argc, char* argv[]) {
     t_buffer* buffer_id = serializar_worker(id_worker);
     t_paquete* paquete_w = empaquetar_buffer(HANDSHAKE_WORKER, buffer_id);
     enviar_paquete(socket_master, paquete_w);
-    
+    liberar_paquete(paquete_w);
+
     log_info(logger_worker, "Worker %d en espera de Queries...", id_worker);
 
     // ===== Bucle principal: esperar y ejecutar Queries =====
@@ -95,6 +98,11 @@ int main(int argc, char* argv[]) {
                          query_recibida->id_query, 
                          query_recibida->archivo_query,
                          query_recibida->program_counter);
+                
+                query_actual_id = query_recibida->id_query;
+                query_actual_pc = query_recibida->program_counter;
+                desalojar_actual = false;
+                ejecutando_query = true;
 
                 // 3. Llamamos al interpeter
                 ejecutar_query(query_recibida->id_query, 
@@ -102,6 +110,11 @@ int main(int argc, char* argv[]) {
                                query_recibida->program_counter, // Pasamos el PC
                                socket_master, 
                                socket_storage);
+
+                ejecutando_query = false;
+                query_actual_id = 0;
+                query_actual_pc = 0;
+                desalojar_actual = false;
                 
                 // 4. Liberamos la estructura
                 free(query_recibida->archivo_query);
@@ -124,15 +137,20 @@ int main(int argc, char* argv[]) {
                 // 4. Enviar paquete DESALOJO_PRIORIDADES de vuelta al Master. 
 
                 log_warning(logger_worker, "## Solicitud de DESALOJO por PRIORIDAD recibida.");
-                
-                desalojar_actual = true; // marcar para que ejecutar_query lo detecte
 
-                ejecutar_query(query_recibida->id_query, 
-                               query_recibida->archivo_query, 
-                               query_recibida->program_counter, // Pasamos el PC
-                               socket_master, 
-                               socket_storage);
-                
+                // Deserializar el ID de la Query que el Master quiere desalojar
+                uint32_t id_query_desalojar = buffer_read_uint32(paquete_master->buffer);
+                log_info(logger_worker, "DESALOJO_PRIORIDADES pedido para Query %d (estado local: ejecutando=%d id=%d)", 
+                         id_query_desalojar, ejecutando_query, query_actual_id);
+
+                if (ejecutando_query && id_query_desalojar == query_actual_id) {
+                    // Marcamos señal para que ejecutar_query corte limpiamente y envíe el contexto
+                    desalojar_actual = true;
+                    log_info(logger_worker, "Marcado desalojar_actual = true para Query %d", id_query_desalojar);
+                    
+
+                }
+
                 break;
             }
 
@@ -147,7 +165,6 @@ int main(int argc, char* argv[]) {
 
                 log_warning(logger_worker, "## Solicitud de DESALOJO por DESCONEXIÓN recibida.");
 
-                // TODO: 
                 // 1. Pausar/Cancelar la ejecución de `ejecutar_query`
                 // 2. Enviar paquete END al Master con motivo "DESCONEXION QUERY"
 
@@ -159,8 +176,11 @@ int main(int argc, char* argv[]) {
                 if (ejecutando_query && id_query_desconectada == query_actual_id) {
                     log_info(logger_worker, "Cancelando ejecución actual de Query %d por desconexión.", id_query_desconectada);
 
+                    desalojar_actual = true;
                     ejecutando_query = false;
                     query_actual_id = 0;
+                    query_actual_pc = 0;
+
                 } else {
                     log_info(logger_worker, "La Query %d no estaba en ejecución.", id_query_desconectada);
                 }
@@ -168,9 +188,9 @@ int main(int argc, char* argv[]) {
                 // Notificar al Master que la Query finalizó por desconexión
                 t_buffer* buffer_end = buffer_create(sizeof(uint32_t));
                 buffer_write_uint32(buffer_end, id_query_desconectada);
-
                 t_paquete* paquete_end = empaquetar_buffer(END, buffer_end);
                 enviar_paquete(socket_master, paquete_end);
+                liberar_paquete(paquete_end);
 
                 log_info(logger_worker, "Query %d deberá ser enviada a EXIT (motivo: desconexión del Query Control).", id_query_desconectada);
 
