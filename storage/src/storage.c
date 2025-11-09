@@ -8,22 +8,24 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // 1. Cargar configuración y logger
+    // Cargar configuración y logger
     inicializar_configs(argv[1]);
     inicializar_logger_storage(storage_configs.loglevel);
-    inicializar_superblock_configs(); 
+
     log_info(logger_storage, "## Storage inicializado.");
 
-    // 2. Inicializar el File System si es FRESH_START
+    inicializar_superblock_configs(); 
+    
+    // Inicializar el File System si es FRESH_START
     inicializar_fs(); 
 
-    // 3. Iniciar el servidor
+    // Iniciar el servidor
     char* puerto_str = string_itoa(storage_configs.puertoescucha);
     int socket_servidor = iniciar_servidor(puerto_str);
     log_info(logger_storage, "## Storage escuchando en puerto %s", puerto_str);
     free(puerto_str);
 
-    // 4. Aceptar Workers indefinidamente
+    // Aceptar Workers indefinidamente
     while(1) {
         int socket_cliente = esperar_cliente(socket_servidor);
         if (socket_cliente > 0) {
@@ -35,6 +37,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    destruir_bitmap();
     destruir_logger();
     destruir_configs();
     return EXIT_SUCCESS;

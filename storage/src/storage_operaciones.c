@@ -1,6 +1,5 @@
 #include "storage_operaciones.h"
-
-
+#include "bitmap.h"
 
 /**
  * @brief Función auxiliar para validar si un directorio existe.
@@ -18,7 +17,6 @@ bool directorio_existe(char* path) {
     // para verificar si es un directorio.
     return S_ISDIR(st.st_mode); //Valido?
 }
-
 
 t_codigo_operacion storage_op_create(t_op_storage* op) {
     
@@ -159,12 +157,10 @@ t_codigo_operacion storage_op_truncate(t_op_storage* op) {
                 // Si nlink == 1, solo queda la referencia en /physical_blocks
                 // y podemos liberar el bloque (excepto el bloque 0).
                 if (st.st_nlink == 1 && atoi(nro_bloque_fisico_str) != 0) {
-                    log_info(logger_storage, "Bloque físico %s ya no está referenciado. Liberando...", nro_bloque_fisico_str);
-                    
-                    // TODO: Implementar lógica de bitarray aquí
-                    // bitarray_clean_bit(bitmap, atoi(nro_bloque_fisico_str))
-                    
-                    log_info(logger_storage, "##%d Bloque Físico Liberado %s", op->query_id, nro_bloque_fisico_str);
+                    int bloque_a_liberar = atoi(nro_bloque_fisico_str);
+                    liberar_bloque(bloque_a_liberar);       
+                    log_info(logger_storage, "##%d Bloque Físico Liberado %d", op->query_id, bloque_a_liberar);
+
                 }
             }
             
@@ -345,9 +341,7 @@ t_codigo_operacion storage_op_delete(t_op_storage* op) {
             // y podemos liberar el bloque (excepto el bloque 0).
             if (st.st_nlink == 1 && atoi(nro_bloque_fisico_str) != 0) {
                 log_info(logger_storage, "Bloque físico %s ya no está referenciado. Liberando...", nro_bloque_fisico_str);
-                
-                // TODO: Implementar lógica de bitarray aquí
-                // bitarray_clean_bit(bitmap, atoi(nro_bloque_fisico_str))
+                liberar_bloque(nro_bloque_fisico_str);            
                 
                 log_info(logger_storage, "##%d Bloque Físico Liberado %s", op->query_id, nro_bloque_fisico_str);
             }
@@ -535,7 +529,6 @@ t_codigo_operacion storage_op_commit(t_op_storage* op) {
     return OP_OK;
 }
 
-
 t_codigo_operacion storage_op_write(t_op_storage* op) {
     
     // Asumimos que `direccion_base` es el `nro_bloque_logico`
@@ -711,7 +704,6 @@ t_codigo_operacion storage_op_read(t_op_storage* op, char** contenido_leido) {
 }
 
 
-
 // --- Función auxiliar para reconstruir la cadena de matriz BLOCKS ---
 char* build_blocks_string(char** bloques_actuales, int count_actual, int count_nuevo) {
     char* nuevo_array_str = string_new();
@@ -749,13 +741,16 @@ void chequear_y_liberar_bloque_fisico(int query_id, char* nro_bloque_fisico_str)
         // nlink == 1 significa que solo existe el archivo en /physical_blocks
         if (st.st_nlink == 1) { 
             log_info(logger_storage, "Bloque físico %d ya no está referenciado. Liberando...", nro_bloque_fisico);
-            
-            // TODO: Implementar lógica de bitarray aquí
-            // bitarray_clean_bit(bitmap, nro_bloque_fisico);
-            
+        
+            liberar_bloque(nro_bloque_fisico);
+
             log_info(logger_storage, "##%d Bloque Físico Liberado %d", query_id, nro_bloque_fisico);
         }
     }
+    else {
+        log_warning(logger_storage, "No se pudo obtener stat() del bloque físico %d", nro_bloque_fisico);
+    }
+    
     free(path_bloque_fisico);
 }
 
@@ -773,8 +768,6 @@ char* array_to_blocks_string(char** bloques_array, int count) {
     string_append(&nuevo_array_str, "]");
     return nuevo_array_str;
 }
-
-
 
 // --- SIMULACIÓN DE BITMAP ---
 // Esto simula encontrar un bloque libre. Empieza en 1 (0 es 'initial_file').
@@ -804,7 +797,6 @@ int encontrar_bloque_libre_mock(int query_id) {
     free(path_nuevo_bloque);
     return nuevo_nro_bloque;
 }
-
 
 // --- Helper para escribir en un bloque físico ---
 void escribir_en_bloque_fisico(char* path_bloque_fisico, char* contenido, int block_size) {

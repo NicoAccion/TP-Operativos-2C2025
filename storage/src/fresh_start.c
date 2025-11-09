@@ -1,4 +1,6 @@
 #include "fresh_start.h"
+#include "bitmap.h"
+
 
 void inicializar_initial_file() {
     
@@ -133,7 +135,12 @@ void crear_archivo_bitmap() {
     char ruta_bitmap[256];
     snprintf(ruta_bitmap, sizeof(ruta_bitmap), "%s/bitmap.bin", storage_configs.puntomontaje);
 
-    FILE* f_bitmap = fopen(ruta_bitmap, "wb");
+    if (access(ruta_bitmap, F_OK) == 0) {
+        log_info(logger_storage, "Bitmap ya existente, no se crea uno nuevo.");
+        return;
+    }
+
+     FILE* f_bitmap = fopen(ruta_bitmap, "wb");
     if (f_bitmap == NULL) {
         perror("ERROR FATAL: No se pudo crear el bitmap.bin");
         exit(EXIT_FAILURE);
@@ -142,15 +149,21 @@ void crear_archivo_bitmap() {
     // Calculamos el tamaño del bitmap en bytes.
     // (cantidad + 7) / 8 es un truco para redondear hacia arriba la división entera.
     size_t tamanio_bitmap = (cantidad_bloques + 7) / 8;
-    printf("\nCreando bitmap.bin con un tamaño de %zu bytes para %u bloques.\n", tamanio_bitmap, cantidad_bloques);
 
+    char* buffer = calloc(1, tamanio_bitmap);
+    fwrite(buffer, tamanio_bitmap, 1, f_bitmap);
+    free(buffer);
+    
     // Lo inicializamos con todos los bits en 0 (todos los bloques libres)
-    for (size_t i = 0; i < tamanio_bitmap; i++) {
+    /*for (size_t i = 0; i < tamanio_bitmap; i++) {
         fputc('\0', f_bitmap);
     }
-
+    */
+    
     fclose(f_bitmap);
-    printf("ÉXITO: Archivo bitmap.bin creado e inicializado.\n");
+    log_info(logger_storage, "Archivo bitmap.bin creado e inicializado con %u bloques.", cantidad_bloques);
+    inicializar_bitmap(ruta_bitmap, cantidad_bloques);
+
 }
 
 void crear_archivo_hash_index() {
@@ -167,6 +180,13 @@ void crear_archivo_hash_index() {
 }
 
 void inicializar_fs(){
+
+    char ruta_bitmap[256];
+    snprintf(ruta_bitmap, sizeof(ruta_bitmap), "%s/bitmap.bin", storage_configs.puntomontaje);
+
+    uint32_t cantidad_bloques = superblock_configs.fssize / superblock_configs.blocksize;
+
+
     // Si es un fresh start borro todo lo que hay en el puntomontaje
     if(storage_configs.freshstart){
         printf("\nModo de inicio: FRESH START\n");
@@ -176,10 +196,20 @@ void inicializar_fs(){
         crear_archivo_hash_index();
         inicializar_initial_file();
         crear_bloque_logico_como_link("files/initial_file/BASE", 0, 0);
-        return;
+    }
+    else {
+        printf("Modo de inicio: Normal\n");
+
+        if (access(ruta_bitmap, F_OK) != 0) {
+            fprintf(stderr, "ERROR: No se encontró bitmap.bin en %s\n", storage_configs.puntomontaje);
+            exit(EXIT_FAILURE);
+        }
     }
 
-    printf("Modo de inicio: Normal\n");
+    inicializar_bitmap(ruta_bitmap, cantidad_bloques);
+    log_info(logger_storage, "## Bitmap inicializado en memoria con %u bloques (%u bytes)", 
+             cantidad_bloques, (cantidad_bloques + 7) / 8);
+
 }
 
 void fs_crear_directorio(const char* dir_name) {
