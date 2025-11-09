@@ -341,7 +341,7 @@ t_codigo_operacion storage_op_delete(t_op_storage* op) {
             // y podemos liberar el bloque (excepto el bloque 0).
             if (st.st_nlink == 1 && atoi(nro_bloque_fisico_str) != 0) {
                 log_info(logger_storage, "Bloque físico %s ya no está referenciado. Liberando...", nro_bloque_fisico_str);
-                liberar_bloque(nro_bloque_fisico_str);            
+                liberar_bloque(atoi(nro_bloque_fisico_str));            
                 
                 log_info(logger_storage, "##%d Bloque Físico Liberado %s", op->query_id, nro_bloque_fisico_str);
             }

@@ -6,6 +6,10 @@
 #include <string.h>
 #include <unistd.h>
 
+    uint32_t query_actual_id = 0;
+    uint32_t query_actual_pc = 0;
+    bool ejecutando_query = false;
+    bool desalojar_actual = false;
 
 /**
  * @brief Envía una operación simple (CREATE, WRITE, TRUNCATE, etc.) y espera una respuesta OK/ERROR.
@@ -54,7 +58,7 @@ char* enviar_op_read_storage(int socket_storage, t_op_storage* op) {
     return contenido;
 }
 
-void ejecutar_query(int query_id, const char* path_query, uint32_t program_counter,
+void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                     int socket_master, int socket_storage) {
     
     FILE* archivo = fopen(path_query, "r");
@@ -83,7 +87,8 @@ void ejecutar_query(int query_id, const char* path_query, uint32_t program_count
         log_info(logger_worker, "## Query %d: Desalojo solicitado (PC=%d)", query_actual_id, pc_actual);
 
         // paquete con el Program Counter actual
-        t_buffer* buffer_pc = serializar_pc(query_actual_id, pc_actual);
+        t_query_ejecucion query_actualizada = {path_query, query_id, pc_actual};
+        t_buffer* buffer_pc = serializar_query_ejecucion(&query_actualizada);
         t_paquete* paquete_pc = empaquetar_buffer(DESALOJO_PRIORIDADES, buffer_pc);
         enviar_paquete(socket_master, paquete_pc);
 

@@ -41,7 +41,7 @@ static int obtener_marco_libre() {
 static int reemplazar_pagina(int query_id, int socket_storage) {
     int marco_victima = -1;
     
-    if (strcasecmp(worker_configs.algoritmo_reemplazo, "LRU") == 0) {
+    if (strcasecmp(worker_configs.algoritmoreemplazo, "LRU") == 0) {
         // LRU
         unsigned long long mas_antiguo = ULLONG_MAX;
 
@@ -57,7 +57,7 @@ static int reemplazar_pagina(int query_id, int socket_storage) {
 
     }
 
-    else if (strcasecmp(worker_configs.algoritmo_reemplazo, "CLOCK-M") == 0) {
+    else if (strcasecmp(worker_configs.algoritmoreemplazo, "CLOCK-M") == 0) {
         // CLOCK-M
         while (1) {
             PaginaMemoria* pagina = &tabla_de_marcos[puntero_clock];

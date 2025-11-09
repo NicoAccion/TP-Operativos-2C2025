@@ -39,6 +39,7 @@ typedef enum {
     DESCONEXION_QUERY = 11,
     DESALOJO_PRIORIDADES = 12,
     WRITE = 13,
+    FLUSH_PAGINA,
     //Codigos de respuesta del storage
     HANDSAHKE_STORAGE_RTA,
     OP_OK,

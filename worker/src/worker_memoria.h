@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <utils/serializacion.h>
 
 #define MAX_FILETAG 128
 

@@ -5,11 +5,6 @@
 #include <string.h>
 #include <unistd.h>
 
-    uint32_t query_actual_id = 0;
-    uint32_t query_actual_pc = 0;
-    bool ejecutando_query = false;
-    bool desalojar_actual = false;
-
 
 int main(int argc, char* argv[]) {
     if (argc != 3) {
@@ -39,7 +34,6 @@ int main(int argc, char* argv[]) {
     t_buffer* buffer_id_storage = serializar_worker(id_worker);
     t_paquete* paquete_handshake_storage = empaquetar_buffer(HANDSHAKE_WORKER, buffer_id_storage);
     enviar_paquete(socket_storage, paquete_handshake_storage);
-    liberar_paquete(paquete_handshake_storage);
 
     // 2. Recibir BLOCK_SIZE de Storage
     t_paquete* rta_handshake_storage = recibir_paquete(socket_storage);
@@ -74,7 +68,6 @@ int main(int argc, char* argv[]) {
     t_buffer* buffer_id = serializar_worker(id_worker);
     t_paquete* paquete_w = empaquetar_buffer(HANDSHAKE_WORKER, buffer_id);
     enviar_paquete(socket_master, paquete_w);
-    liberar_paquete(paquete_w);
 
     log_info(logger_worker, "Worker %d en espera de Queries...", id_worker);
 
@@ -186,11 +179,9 @@ int main(int argc, char* argv[]) {
                 }
 
                 // Notificar al Master que la Query finalizó por desconexión
-                t_buffer* buffer_end = buffer_create(sizeof(uint32_t));
-                buffer_write_uint32(buffer_end, id_query_desconectada);
+                t_buffer* buffer_end = serializar_operacion_end("DESCONEXION QUERY");
                 t_paquete* paquete_end = empaquetar_buffer(END, buffer_end);
                 enviar_paquete(socket_master, paquete_end);
-                liberar_paquete(paquete_end);
 
                 log_info(logger_worker, "Query %d deberá ser enviada a EXIT (motivo: desconexión del Query Control).", id_query_desconectada);
 

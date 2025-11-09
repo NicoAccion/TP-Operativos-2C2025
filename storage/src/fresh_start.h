@@ -8,6 +8,7 @@
 
 #include <utils/configs.h>
 #include "storage-configs.h"
+#include "storage-log.h"
 //#include "fs_simulacion.h"
 
 /**
