@@ -146,7 +146,11 @@ void* aging(){
         pthread_mutex_lock(&mutex_ready);
         for(int i = 0; i < list_size(ready); i++) {
             t_query_completa* query = list_get(ready, i);
-            if (query->prioridad > 0) query->prioridad--;
+            if (query->prioridad > 0) {
+                query->prioridad--;
+                log_info(logger_master, "##%d Cambio de prioridad: %d - %d", 
+                         query->id_query, query->prioridad + 1, query->prioridad);
+            }
         }
         pthread_mutex_unlock(&mutex_ready);
     }

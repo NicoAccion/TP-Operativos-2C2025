@@ -71,6 +71,7 @@ void manejar_nueva_conexion(void* arg) {
 }
 
 void atender_query_control(int socket_cliente, t_paquete* paquete) {
+
     // 1. Deserializar la query usando el paquete recibido
     t_query* query = deserializar_query(paquete->buffer);
     liberar_paquete(paquete);
@@ -121,7 +122,7 @@ void atender_query_control(int socket_cliente, t_paquete* paquete) {
                 log_info(logger_master, "## Se desaloja la Query %d (%d) del Worker %d - Motivo: DESCONEXION",
                          query_completa->id_query, query_completa->prioridad, worker->id_worker);
 
-                //Si el worker se desconectó
+                //Verifico si el worker se desconectó
                 if(enviar_paquete(worker->socket_cliente, paquete_worker) == -1){
 
                     //Loggeo la desconexión
@@ -261,7 +262,6 @@ void atender_worker(int socket_cliente, t_paquete* paquete) {
                         worker->query_asignada->estado = EXIT;
 
                         enviar_paquete(worker->query_asignada->socket_cliente, paquete);
-
                     }
 
                     //Si se desconecta el Query Control

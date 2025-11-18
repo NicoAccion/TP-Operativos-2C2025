@@ -10,6 +10,12 @@
 #include <worker_interpreter.h>
 #include "worker_memoria.h"
 
+typedef struct {
+    t_paquete* paquete;
+    int socket_master;
+    int socket_storage;
+} t_paquete_y_sockets;
+
 /**
  * @brief Envía una operación simple (CREATE, WRITE, TRUNCATE, etc.)
  * y espera una respuesta OK/ERROR.
@@ -23,5 +29,6 @@ t_codigo_operacion enviar_op_simple_storage(int socket_storage, t_codigo_operaci
  */
 char* enviar_op_read_storage(int socket_storage, t_op_storage* op);
 
+void* atender_master (void* arg);
 
 #endif

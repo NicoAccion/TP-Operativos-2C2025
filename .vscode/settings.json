@@ -15,6 +15,9 @@
         "master-configs.h": "c",
         "serializacion.h": "c",
         "pthread.h": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "worker-log.h": "c",
+        "stdbool.h": "c",
+        "worker_interpreter.h": "c"
     }
 }

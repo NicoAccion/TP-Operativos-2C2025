@@ -6,10 +6,11 @@
 #include <string.h>
 #include <unistd.h>
 
-    uint32_t query_actual_id = 0;
-    uint32_t query_actual_pc = 0;
-    bool ejecutando_query = false;
-    bool desalojar_actual = false;
+uint32_t query_actual_id = 0;
+uint32_t query_actual_pc = 0;
+bool ejecutando_query = false;
+bool desalojar_actual = false;
+bool desconexion_actual = false;
 
 /**
  * @brief Envía una operación simple (CREATE, WRITE, TRUNCATE, etc.) y espera una respuesta OK/ERROR.
@@ -71,6 +72,12 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
         return;
     }
 
+    // Inicializo estado global
+    query_actual_id = query_id;
+    query_actual_pc = 0;
+    ejecutando_query = true;
+
+
     char linea[256];
     uint32_t pc_actual = 0;
     bool fin = false;
@@ -83,19 +90,40 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
 
     while (!fin && fgets(linea, sizeof(linea), archivo)) {
 
-         if (desalojar_actual) {
-        log_info(logger_worker, "## Query %d: Desalojo solicitado (PC=%d)", query_actual_id, pc_actual);
+        if (desalojar_actual) {
+            log_info(logger_worker, "## Query %d: Desalojo solicitado (PC=%d)", query_actual_id, pc_actual);
 
-        // paquete con el Program Counter actual
-        t_query_ejecucion query_actualizada = {path_query, query_id, pc_actual};
-        t_buffer* buffer_pc = serializar_query_ejecucion(&query_actualizada);
-        t_paquete* paquete_pc = empaquetar_buffer(DESALOJO_PRIORIDADES, buffer_pc);
-        enviar_paquete(socket_master, paquete_pc);
+            // paquete con el Program Counter actual
+            t_query_ejecucion query_actualizada = {path_query, query_id, pc_actual};
+            t_buffer* buffer_pc = serializar_query_ejecucion(&query_actualizada);
+            t_paquete* paquete_pc = empaquetar_buffer(DESALOJO_PRIORIDADES, buffer_pc);
+            enviar_paquete(socket_master, paquete_pc);
 
-        desalojar_actual = false;
-        ejecutando_query = false;
-        fclose(archivo);
-        return;  // Termina la ejecución sin marcar fin de Query
+            desalojar_actual = false;
+            desconexion_actual = false;
+            ejecutando_query = false;
+            query_actual_id = 0;
+            query_actual_pc = 0;
+
+            fclose(archivo);
+            return;  // Termina la ejecución sin marcar fin de Query
+        }
+
+        if (desconexion_actual) {
+
+            log_info(logger_worker, "Se desconectó la query, %d", query_actual_id);
+            t_buffer* buffer = serializar_operacion_end("DESCONEXION QUERY");
+            t_paquete* paquete = empaquetar_buffer(END, buffer);
+            enviar_paquete(socket_master, paquete);
+
+            desalojar_actual = false;
+            desconexion_actual = false;
+            ejecutando_query = false;
+            query_actual_id = 0;
+            query_actual_pc = 0;
+
+            fclose(archivo);
+            return;
         }
 
         linea[strcspn(linea, "\r\n")] = 0; 
@@ -272,4 +300,9 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
     }
 
     fclose(archivo);
+
+    ejecutando_query = false;
+    desalojar_actual = false;
+    query_actual_id = 0;
+    query_actual_pc = 0;
 }
