@@ -579,19 +579,29 @@ t_codigo_operacion storage_op_write(t_op_storage* op) {
     stat(path_bloque_fisico_actual, &st);
 
     // Si nlink > 2 (alguien más lo usa) O si es el bloque 0, necesitamos copiar.
-    if (st.st_nlink > 2 || atoi(nro_bloque_fisico_actual_str) == 0) {
+        if (st.st_nlink > 2 || atoi(nro_bloque_fisico_actual_str) == 0) {
         log_info(logger_storage, "##%d WRITE (CoW): Bloque físico %s es compartido. Realizando copia.", op->query_id, nro_bloque_fisico_actual_str);
 
-        // a. Encontrar bloque nuevo (simulado)
-        int nuevo_nro_bloque_fisico = encontrar_bloque_libre_mock(op->query_id);
-        if (nuevo_nro_bloque_fisico == -1) { /*... error ...*/ return OP_ERROR; }
+        // a. Encontrar bloque nuevo (REAL - Usando Bitmap)
+        
+        int nuevo_nro_bloque_fisico = reservar_bloque_real(op->query_id);
+        
+        if (nuevo_nro_bloque_fisico == -1) { 
+            // Si no hay bloques, limpiamos y devolvemos error
+            log_error(logger_storage, "##%d Fallo CoW: No hay espacio para copiar bloque.", op->query_id);
+            string_array_destroy(bloques_array);
+            config_destroy(metadata);
+            free(path_tag); free(path_metadata); free(path_logical_blocks_dir); 
+            free(path_bloque_logico); free(path_bloque_fisico_actual);
+            return OP_ERROR; 
+        }
         
         char* path_nuevo_bloque_fisico = string_from_format("%s/physical_blocks/block%04d.dat", 
                                                             storage_configs.puntomontaje, 
                                                             nuevo_nro_bloque_fisico);
         
         // b. Escribir contenido en el *nuevo* bloque
-        escribir_en_bloque_fisico(path_nuevo_bloque_fisico, op->contenido, superblock_configs.blocksize);
+        escribir_en_bloque_fisico(path_nuevo_bloque_fisico, op->contenido, op->tamano_contenido, superblock_configs.blocksize);
 
         // c. Actualizar hard link
         unlink(path_bloque_logico); // Borrar link al bloque viejo
@@ -615,7 +625,7 @@ t_codigo_operacion storage_op_write(t_op_storage* op) {
         // --- Escribir directo ---
         // nlink == 2 (solo /physical_blocks y este /logical_blocks) y no es bloque 0
         log_info(logger_storage, "##%d WRITE: Escribiendo directo en bloque físico %s", op->query_id, nro_bloque_fisico_actual_str);
-        escribir_en_bloque_fisico(path_bloque_fisico_actual, op->contenido, superblock_configs.blocksize);
+        escribir_en_bloque_fisico(path_bloque_fisico_actual, op->contenido, op->tamano_contenido, superblock_configs.blocksize);
     }
 
     log_info(logger_storage, "##%d Bloque Lógico Escrito %s:%s Número de Bloque: %d", 
@@ -769,7 +779,7 @@ char* array_to_blocks_string(char** bloques_array, int count) {
     return nuevo_array_str;
 }
 
-// --- SIMULACIÓN DE BITMAP ---
+/*// --- SIMULACIÓN DE BITMAP ---
 // Esto simula encontrar un bloque libre. Empieza en 1 (0 es 'initial_file').
 static int mock_next_free_block = 1;
 
@@ -796,17 +806,16 @@ int encontrar_bloque_libre_mock(int query_id) {
     log_info(logger_storage, "##%d Bloque Físico Reservado %d (Simulación)", query_id, nuevo_nro_bloque);
     free(path_nuevo_bloque);
     return nuevo_nro_bloque;
-}
+}*/
 
 // --- Helper para escribir en un bloque físico ---
-void escribir_en_bloque_fisico(char* path_bloque_fisico, char* contenido, int block_size) {
+void escribir_en_bloque_fisico(char* path_bloque_fisico, void* contenido, int tamano_contenido, int block_size) {
     int fd = open(path_bloque_fisico, O_RDWR);
     if (fd == -1) {
         log_error(logger_storage, "WRITE_HELPER: No se pudo abrir %s", path_bloque_fisico);
         return;
     }
     
-    // Mapeamos el bloque a memoria
     void* buffer_bloque = mmap(NULL, block_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (buffer_bloque == MAP_FAILED) {
         log_error(logger_storage, "WRITE_HELPER: mmap falló");
@@ -814,17 +823,49 @@ void escribir_en_bloque_fisico(char* path_bloque_fisico, char* contenido, int bl
         return;
     }
 
-    // Copiamos el contenido
-    int len_contenido = strlen(contenido);
-    int bytes_a_copiar = (len_contenido < block_size) ? len_contenido : block_size;
+    // Usamos el tamaño que nos pasan, validando que no se pase del block_size
+    int bytes_a_copiar = (tamano_contenido < block_size) ? tamano_contenido : block_size;
     
-    // Limpiamos el bloque (opcional, pero buena idea)
-    memset(buffer_bloque, 0, block_size); 
-    // Copiamos el contenido nuevo
-    memcpy(buffer_bloque, contenido, bytes_a_copiar);
+    memset(buffer_bloque, 0, block_size); // Limpiamos basura anterior
+    memcpy(buffer_bloque, contenido, bytes_a_copiar); // Copiamos bytes crudos
 
-    // Sincronizamos y liberamos
     msync(buffer_bloque, block_size, MS_SYNC);
     munmap(buffer_bloque, block_size);
     close(fd);
+}
+
+int reservar_bloque_real(int query_id) {
+    // 1. Buscar bit libre en el bitarray
+    int bloque_libre = buscar_bloque_libre(); 
+
+    if (bloque_libre == -1) {
+        log_error(logger_storage, "##%d ERROR: File System LLENO. No hay bloques libres.", query_id);
+        return -1;
+    }
+
+    // 2. Marcar como ocupado en el bitarray y guardar en disco
+    marcar_bloque_ocupado(bloque_libre); 
+
+    // 3. Asegurar que existe el archivo físico (blockXXXX.dat)
+    char* path_bloque = string_from_format("%s/physical_blocks/block%04d.dat", 
+                                          storage_configs.puntomontaje, 
+                                          bloque_libre);
+    
+    // Lo abrimos con O_CREAT para asegurarnos que exista.
+    // Si ya existía (de una ejecución anterior), no pasa nada, se sobrescribe
+    int fd = open(path_bloque, O_RDWR | O_CREAT, 0666);
+    if (fd == -1) {
+        log_error(logger_storage, "##%d ERROR: No se pudo crear archivo físico para bloque %d", query_id, bloque_libre);
+        liberar_bloque(bloque_libre); // Rollback
+        free(path_bloque);
+        return -1;
+    }
+
+    // Aseguramos el tamaño
+    ftruncate(fd, superblock_configs.blocksize);
+    close(fd);
+
+    log_info(logger_storage, "##%d Bloque Físico Reservado %d (Real)", query_id, bloque_libre);
+    free(path_bloque);
+    return bloque_libre;
 }

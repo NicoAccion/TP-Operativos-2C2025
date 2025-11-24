@@ -354,9 +354,10 @@ typedef struct {
     uint32_t query_id;
     char* nombre_file;
     char* nombre_tag;
-    uint32_t tamano; // Para TRUNCATE y READ
+    uint32_t tamano; // Para TRUNCATE y READ (solicitud)
     uint32_t direccion_base; // Para WRITE y READ
-    char* contenido; // Para WRITE
+    uint32_t tamano_contenido; // Tamaño exacto en bytes del contenido
+    void* contenido;           // void* para soportar bytes 
     char* nombre_file_destino; // Para TAG
     char* nombre_tag_destino; // Para TAG
 } t_op_storage;

@@ -52,8 +52,9 @@ char* enviar_op_read_storage(int socket_storage, t_op_storage* op) {
         liberar_paquete(paquete_rta);
         return NULL;
     }
-    t_op_storage* op_rta = deserializar_op_storage(paquete_rta->buffer, READ_RTA);
-    char* contenido = string_duplicate(op_rta->contenido); 
+    t_op_storage* op_rta = deserializar_op_storage(paquete_rta->buffer, READ_RTA); 
+    char* contenido = malloc(op_rta->tamano_contenido);
+    memcpy(contenido, op_rta->contenido, op_rta->tamano_contenido);
     destruir_op_storage(op_rta);
     liberar_paquete(paquete_rta);
     return contenido;
@@ -65,7 +66,6 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
     FILE* archivo = fopen(path_query, "r");
     if (!archivo) {
         log_error(logger_worker, "No se pudo abrir el archivo de Query: %s", path_query);
-        // Informar al Master que la query falló
         t_buffer* buffer_end = serializar_operacion_end("ERROR_APERTURA");
         t_paquete* paquete_end = empaquetar_buffer(END, buffer_end);
         enviar_paquete(socket_master, paquete_end);
@@ -93,7 +93,10 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
         if (desalojar_actual) {
             log_info(logger_worker, "## Query %d: Desalojo solicitado (PC=%d)", query_actual_id, pc_actual);
 
-            // paquete con el Program Counter actual
+            // Antes de irse, guarda todo lo que esté "sucio" en memoria
+            realizar_flush_file(query_actual_id, NULL, NULL, socket_storage); 
+
+            // Paquete con el Program Counter actual
             t_query_ejecucion query_actualizada = {path_query, query_id, pc_actual};
             t_buffer* buffer_pc = serializar_query_ejecucion(&query_actualizada);
             t_paquete* paquete_pc = empaquetar_buffer(DESALOJO_PRIORIDADES, buffer_pc);
@@ -106,11 +109,10 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
             query_actual_pc = 0;
 
             fclose(archivo);
-            return;  // Termina la ejecución sin marcar fin de Query
+            return;
         }
 
         if (desconexion_actual) {
-
             log_info(logger_worker, "Se desconectó la query, %d", query_actual_id);
             t_buffer* buffer = serializar_operacion_end("DESCONEXION QUERY");
             t_paquete* paquete = empaquetar_buffer(END, buffer);
@@ -138,11 +140,12 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
         }
 
         log_info(logger_worker, "## Query %d: FETCH Program Counter: %d - %s", query_id, pc_actual, instruccion);
-        usleep(worker_configs.retardomemoria * 1000);
+        
+        // El retardo tambien esta dentro de leer/escribir memoria, 
+        usleep(worker_configs.retardomemoria * 1000); 
         
         char* file_tag_str;
         char* file_tag_copy;
-
 
         // ==== CREATE ====
         if (strcmp(instruccion, "CREATE") == 0) {
@@ -177,16 +180,19 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
             char* file_tag = strtok(NULL, " ");
             char* direccion = strtok(NULL, " ");
             char* contenido = strtok(NULL, ""); 
+            
             if(file_tag && direccion && contenido) {
-                t_op_storage* op_write = calloc(1, sizeof(t_op_storage));
-                op_write->query_id = query_id;
+                // Parseamos localmente para llamar a la memoria
                 file_tag_copy = strdup(file_tag);
-                op_write->nombre_file = strdup(strtok(file_tag_copy, ":"));
-                op_write->nombre_tag  = strdup(strtok(NULL, ":"));
+                char* file_local = strdup(strtok(file_tag_copy, ":"));
+                char* tag_local  = strdup(strtok(NULL, ":"));
+                
+                // LLAMADA A LA MMU 
+                escribir_en_memoria(query_id, file_local, tag_local, atoi(direccion), contenido, socket_storage);
+                
+                free(file_local);
+                free(tag_local);
                 free(file_tag_copy);
-                op_write->direccion_base = atoi(direccion); // nro_bloque_logico
-                op_write->contenido = strdup(contenido);
-                enviar_op_simple_storage(socket_storage, WRITE, op_write);
             }
         }
         // ==== READ ====
@@ -194,26 +200,20 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
             char* file_tag = strtok(NULL, " ");
             char* direccion = strtok(NULL, " ");
             char* tamanio = strtok(NULL, " ");
+            
             if(file_tag && direccion && tamanio) {
-                
                 file_tag_copy = strdup(file_tag);
-                char* file_name_local = strdup(strtok(file_tag_copy, ":"));
-                char* tag_name_local = strdup(strtok(NULL, ":"));
-                free(file_tag_copy);
+                char* file_local = strdup(strtok(file_tag_copy, ":"));
+                char* tag_local  = strdup(strtok(NULL, ":"));
 
-                t_op_storage* op_read_req = calloc(1, sizeof(t_op_storage));
-                op_read_req->query_id = query_id;
-                op_read_req->nombre_file = strdup(file_name_local);
-                op_read_req->nombre_tag  = strdup(tag_name_local);
-                op_read_req->direccion_base = atoi(direccion);
-                op_read_req->tamano = atoi(tamanio); 
-
-                char* valor_leido = enviar_op_read_storage(socket_storage, op_read_req);
+                // LLAMADA A LA MMU. Si hay Page Fault, mmu deberia encargarse
+                char* valor_leido = leer_de_memoria(query_id, file_local, tag_local, 
+                                                    atoi(direccion), atoi(tamanio), socket_storage);
                 
                 if (valor_leido != NULL) {
                     t_operacion_query op_read_rta;
-                    op_read_rta.file = strdup(file_name_local); 
-                    op_read_rta.tag = strdup(tag_name_local);   
+                    op_read_rta.file = strdup(file_local); 
+                    op_read_rta.tag = strdup(tag_local);   
                     op_read_rta.informacion = valor_leido;
                     
                     t_buffer* buffer_read = serializar_operacion_query(&op_read_rta);
@@ -222,15 +222,14 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
 
                     free(op_read_rta.file);
                     free(op_read_rta.tag);
+                    // valor_leido se libera aqui
                     free(op_read_rta.informacion); 
                 }
-                free(file_name_local);
-                free(tag_name_local);
+                free(file_local);
+                free(tag_local);
+                free(file_tag_copy);
             }
-            // Aquí podrías enviar el contenido leído al Master
-            // enviar_mensaje("Resultado de READ", socket_master);
         }
-
         // ==== TAG ====
         else if (strcmp(instruccion, "TAG") == 0) {
             char* file_tag_origen_str = strtok(NULL, " ");
@@ -254,22 +253,40 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
         else if (strcmp(instruccion, "COMMIT") == 0) {
             file_tag_str = strtok(NULL, " ");
             if(file_tag_str) {
+                file_tag_copy = strdup(file_tag_str);
+                char* file_local = strdup(strtok(file_tag_copy, ":"));
+                char* tag_local  = strdup(strtok(NULL, ":"));
+                
+                // 1. FLUSH de páginas sucias de ESTE archivo
+                realizar_flush_file(query_id, file_local, tag_local, socket_storage);
+                
+                // 2. Enviar instrucción COMMIT
                 t_op_storage* op_commit = calloc(1, sizeof(t_op_storage));
                 op_commit->query_id = query_id;
-                file_tag_copy = strdup(file_tag_str);
-                op_commit->nombre_file = strdup(strtok(file_tag_copy, ":"));
-                op_commit->nombre_tag  = strdup(strtok(NULL, ":"));
-                free(file_tag_copy);
+                op_commit->nombre_file = strdup(file_local);
+                op_commit->nombre_tag  = strdup(tag_local);
+                
                 enviar_op_simple_storage(socket_storage, COMMIT, op_commit);
+                
+                free(file_local);
+                free(tag_local);
+                free(file_tag_copy);
              }
         }
-
         // ==== FLUSH ====
         else if (strcmp(instruccion, "FLUSH") == 0) {
-            log_info(logger_worker, "## Query %d: FLUSH (No implementado)", query_id);
-            // (Aquí se persistiría lo modificado)
+            
+             file_tag_str = strtok(NULL, " ");
+             if(file_tag_str) {
+                file_tag_copy = strdup(file_tag_str);
+                char* file_local = strdup(strtok(file_tag_copy, ":"));
+                char* tag_local  = strdup(strtok(NULL, ":"));
+                realizar_flush_file(query_id, file_local, tag_local, socket_storage);
+                free(file_local);
+                free(tag_local);
+                free(file_tag_copy);
+             }
         }
-
         // ==== DELETE ====
         else if (strcmp(instruccion, "DELETE") == 0) {
             file_tag_str = strtok(NULL, " ");
@@ -283,7 +300,6 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                 enviar_op_simple_storage(socket_storage, DELETE, op_delete);
             }
         }
-
         // ==== END ====
         else if (strcmp(instruccion, "END") == 0) {
             char* motivo = "OK";
@@ -293,7 +309,6 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
             fin = true;
         }
 
-        //esperar_retardo();
         log_info(logger_worker, "## Query %d: Instrucción realizada: %s", query_id, linea_copy);
         free(linea_copy); 
         pc_actual++;
