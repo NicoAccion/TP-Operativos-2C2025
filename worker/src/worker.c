@@ -19,7 +19,7 @@ int main(int argc, char* argv[]){
     inicializar_logger_worker(worker_configs.loglevel);
     log_info(logger_worker, "## Worker %d inicializado", id_worker);
 
-
+    inicializar_estructuras_globales();
 
     // ===== Conexión con Storage =====
     char* puerto_storage_str = string_itoa(worker_configs.puertostorage);
@@ -27,6 +27,7 @@ int main(int argc, char* argv[]){
     free(puerto_storage_str);
     if (socket_storage < 0) {
         log_error(logger_worker, "Error al conectar con Storage");
+        destruir_estructuras_globales();
         return EXIT_FAILURE;
     }
     log_info(logger_worker, "Conectado a Storage. Realizando handshake...");
@@ -43,6 +44,7 @@ int main(int argc, char* argv[]){
         log_error(logger_worker, "Error en handshake con Storage. Storage desconectado.");
         if(rta_handshake_storage) liberar_paquete(rta_handshake_storage);
         close(socket_storage);
+        destruir_estructuras_globales();
         return EXIT_FAILURE;
     }
     
@@ -62,6 +64,7 @@ int main(int argc, char* argv[]){
     if (socket_master < 0) {
         log_error(logger_worker, "Error al conectar con Master");
         close(socket_storage);
+        destruir_estructuras_globales();
         return EXIT_FAILURE;
     }
     log_info(logger_worker, "Conectado a Master");
@@ -95,19 +98,35 @@ int main(int argc, char* argv[]){
     liberar_memoria();
     close(socket_master);
     close(socket_storage);
+    destruir_estructuras_globales();
     log_info(logger_worker, "Worker %d finalizado.", id_worker);
     return 0;
 }
 
 void* atender_master(void* arg){
     t_paquete_y_sockets* paquete_y_sockets = (t_paquete_y_sockets*) arg;
+    t_paquete* paquete = paquete_y_sockets->paquete;
+    int socket_master = paquete_y_sockets->socket_master;
+    int socket_storage = paquete_y_sockets->socket_storage;
 
-    switch (paquete_y_sockets->paquete->codigo_operacion) {
+    switch (paquete->codigo_operacion) {
             
         // --- NUEVA QUERY O RE-EJECUCIÓN ---
-        case PAQUETE_QUERY_EJECUCION: { 
+        case PAQUETE_QUERY_EJECUCION: {
+            
+            pthread_mutex_lock(&mutex_flags);
+            bool ocupado = ejecutando_query;
+            pthread_mutex_unlock(&mutex_flags);
+
+            if (ocupado) {
+
+                log_warning(logger_worker, "Se recibió QUERY pero el Worker está ocupado. Rechazando.");
+
+                break;
+            }
+
             // 1. Deserializamos el paquete correcto
-            t_query_ejecucion* query_recibida = deserializar_query_ejecucion(paquete_y_sockets->paquete->buffer);
+            t_query_ejecucion* query_recibida = deserializar_query_ejecucion(paquete->buffer);
 
             // 2. Logueamos
             log_info(logger_worker, "## Query %d: Se recibe la Query. El path de operaciones es: %s (PC: %d)", 
@@ -119,10 +138,9 @@ void* atender_master(void* arg){
             ejecutar_query(query_recibida->id_query,
                             query_recibida->archivo_query,
                             query_recibida->program_counter, // Pasamos el PC
-                            paquete_y_sockets->socket_master,
-                            paquete_y_sockets->socket_storage);
+                            socket_master,
+                            socket_storage);
 
-                
             // 4. Liberamos la estructura
             free(query_recibida->archivo_query);
             free(query_recibida);
@@ -131,9 +149,11 @@ void* atender_master(void* arg){
             
             // --- DESALOJO POR PRIORIDAD ---
         case DESALOJO_PRIORIDADES: { 
-                
+
+            pthread_mutex_lock(&mutex_flags);
             log_info(logger_worker, "## Query %d: Desalojada por pedido del Master", query_actual_id);
             desalojar_actual = true;
+            pthread_mutex_unlock(&mutex_flags);
 
             break;
         }
@@ -141,8 +161,10 @@ void* atender_master(void* arg){
         // --- DESCONEXIÓN DE QUERY CONTROL ---
         case DESCONEXION_QUERY: {
 
+            pthread_mutex_lock(&mutex_flags);
             log_info(logger_worker, "## Query %d: Desalojada por desconexión del Query Control", query_actual_id);
             desconexion_actual = true;
+            pthread_mutex_unlock(&mutex_flags);
 
             break;
         }
@@ -152,6 +174,7 @@ void* atender_master(void* arg){
             break;
     }
 
-    liberar_paquete(paquete_y_sockets->paquete);
+    liberar_paquete(paquete);
+    free(paquete_y_sockets);
     return NULL;
 }
