@@ -292,16 +292,14 @@ void destruir_op_storage(t_op_storage* op) {
 
 t_buffer* serializar_op_storage(t_op_storage* op, t_codigo_operacion codigo_operacion) {
     t_buffer* buffer;
-    uint32_t len_file = 0, len_tag = 0, len_contenido = 0, len_file_dest = 0, len_tag_dest = 0;
+    uint32_t len_file = 0, len_tag = 0, len_file_dest = 0, len_tag_dest = 0;
 
-    // Calculamos longitudes de antemano (solo si no son NULL)
+    // Calculamos longitudes de cadenas (solo si no son NULL)
     if (op->nombre_file) len_file = strlen(op->nombre_file) + 1;
     if (op->nombre_tag) len_tag = strlen(op->nombre_tag) + 1;
-    if (op->contenido) len_contenido = strlen(op->contenido) + 1;
     if (op->nombre_file_destino) len_file_dest = strlen(op->nombre_file_destino) + 1;
     if (op->nombre_tag_destino) len_tag_dest = strlen(op->nombre_tag_destino) + 1;
 
-    // El switch decide qué campos serializar basado en el código de operación
     switch (codigo_operacion) {
         
         case CREATE: // [query_id, file, tag]
@@ -319,13 +317,18 @@ t_buffer* serializar_op_storage(t_op_storage* op, t_codigo_operacion codigo_oper
             buffer_add_uint32(buffer, op->tamano);
             break;
 
-        case WRITE: // [query_id, file, tag, dir_base, contenido]
-            buffer = buffer_create(sizeof(uint32_t) * 5 + len_file + len_tag + len_contenido);
+        case WRITE: // [query_id, file, tag, dir_base, tamano_contenido, contenido]
+            // PErr
+            buffer = buffer_create(sizeof(uint32_t) * 5 + len_file + len_tag + op->tamano_contenido);
+            
             buffer_add_uint32(buffer, op->query_id);
             buffer_add_string(buffer, len_file, op->nombre_file);
             buffer_add_string(buffer, len_tag, op->nombre_tag);
             buffer_add_uint32(buffer, op->direccion_base);
-            buffer_add_string(buffer, len_contenido, op->contenido); // Asumimos contenido es string
+            
+            // Usamos binario
+            buffer_add_uint32(buffer, op->tamano_contenido); // Enviamos el tamaño
+            buffer_add(buffer, op->contenido, op->tamano_contenido); // Enviamos los bytes
             break;
 
         case READ: // [query_id, file, tag, dir_base, tamano]
@@ -337,7 +340,7 @@ t_buffer* serializar_op_storage(t_op_storage* op, t_codigo_operacion codigo_oper
             buffer_add_uint32(buffer, op->tamano);
             break;
 
-        case TAG: // [query_id, file_origen, tag_origen, file_dest, tag_dest]
+        case TAG: 
             buffer = buffer_create(sizeof(uint32_t) * 5 + len_file + len_tag + len_file_dest + len_tag_dest);
             buffer_add_uint32(buffer, op->query_id);
             buffer_add_string(buffer, len_file, op->nombre_file);
@@ -346,23 +349,22 @@ t_buffer* serializar_op_storage(t_op_storage* op, t_codigo_operacion codigo_oper
             buffer_add_string(buffer, len_tag_dest, op->nombre_tag_destino);
             break;
 
-        case COMMIT: // [query_id, file, tag]
-        case DELETE: // [query_id, file, tag]
+        case COMMIT: 
+        case DELETE: 
             buffer = buffer_create(sizeof(uint32_t) * 3 + len_file + len_tag);
             buffer_add_uint32(buffer, op->query_id);
             buffer_add_string(buffer, len_file, op->nombre_file);
             buffer_add_string(buffer, len_tag, op->nombre_tag);
             break;
         
-        case READ_RTA: //
-            // Asumimos que el contenido es un string
-            if (op->contenido) len_contenido = strlen(op->contenido) + 1;
-            buffer = buffer_create(sizeof(uint32_t) + len_contenido);
-            buffer_add_string(buffer, len_contenido, op->contenido);
+        case READ_RTA: // [tamano_contenido, contenido]
+            //usamos binario
+            buffer = buffer_create(sizeof(uint32_t) + op->tamano_contenido);
+            buffer_add_uint32(buffer, op->tamano_contenido);
+            buffer_add(buffer, op->contenido, op->tamano_contenido);
             break;
 
         default:
-            // Operación no reconocida para Storage, buffer vacío
             buffer = buffer_create(0);
             break;
     }
@@ -371,34 +373,37 @@ t_buffer* serializar_op_storage(t_op_storage* op, t_codigo_operacion codigo_oper
 
 
 t_op_storage* deserializar_op_storage(t_buffer* buffer, t_codigo_operacion codigo_operacion) {
-    // calloc inicializa toda la memoria en 0/NULL, lo cual es perfecto
     t_op_storage* op = calloc(1, sizeof(t_op_storage)); 
-    uint32_t len; // Variable auxiliar
+    uint32_t len; 
 
     switch (codigo_operacion) {
 
-        case CREATE: // [query_id, file, tag]
+        case CREATE: 
             op->query_id = buffer_read_uint32(buffer);
             op->nombre_file = buffer_read_string(buffer, &len);
             op->nombre_tag = buffer_read_string(buffer, &len);
             break;
         
-        case TRUNCATE: // [query_id, file, tag, tamano]
+        case TRUNCATE: 
             op->query_id = buffer_read_uint32(buffer);
             op->nombre_file = buffer_read_string(buffer, &len);
             op->nombre_tag = buffer_read_string(buffer, &len);
             op->tamano = buffer_read_uint32(buffer);
             break;
 
-        case WRITE: // [query_id, file, tag, dir_base, contenido]
+        case WRITE: 
             op->query_id = buffer_read_uint32(buffer);
             op->nombre_file = buffer_read_string(buffer, &len);
             op->nombre_tag = buffer_read_string(buffer, &len);
             op->direccion_base = buffer_read_uint32(buffer);
-            op->contenido = buffer_read_string(buffer, &len);
+            
+            // Cambio binario
+            op->tamano_contenido = buffer_read_uint32(buffer); // Leemos tamaño
+            op->contenido = malloc(op->tamano_contenido);      // Reservamos
+            buffer_read(buffer, op->contenido, op->tamano_contenido); // Leemos bytes
             break;
 
-        case READ: // [query_id, file, tag, dir_base, tamano]
+        case READ: 
             op->query_id = buffer_read_uint32(buffer);
             op->nombre_file = buffer_read_string(buffer, &len);
             op->nombre_tag = buffer_read_string(buffer, &len);
@@ -406,7 +411,7 @@ t_op_storage* deserializar_op_storage(t_buffer* buffer, t_codigo_operacion codig
             op->tamano = buffer_read_uint32(buffer);
             break;
 
-        case TAG: // [query_id, file_origen, tag_origen, file_dest, tag_dest]
+        case TAG: 
             op->query_id = buffer_read_uint32(buffer);
             op->nombre_file = buffer_read_string(buffer, &len);
             op->nombre_tag = buffer_read_string(buffer, &len);
@@ -414,19 +419,21 @@ t_op_storage* deserializar_op_storage(t_buffer* buffer, t_codigo_operacion codig
             op->nombre_tag_destino = buffer_read_string(buffer, &len);
             break;
 
-        case COMMIT: // [query_id, file, tag]
-        case DELETE: // [query_id, file, tag]
+        case COMMIT: 
+        case DELETE: 
             op->query_id = buffer_read_uint32(buffer);
             op->nombre_file = buffer_read_string(buffer, &len);
             op->nombre_tag = buffer_read_string(buffer, &len);
             break;
 
-        case READ_RTA: // 
-            op->contenido = buffer_read_string(buffer, &len);
+        case READ_RTA: 
+            // Cambio a bianario
+            op->tamano_contenido = buffer_read_uint32(buffer);
+            op->contenido = malloc(op->tamano_contenido);
+            buffer_read(buffer, op->contenido, op->tamano_contenido);
             break;
         
         default:
-            // Error, liberar y devolver NULL
             destruir_op_storage(op);
             return NULL; 
     }
