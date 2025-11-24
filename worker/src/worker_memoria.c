@@ -27,6 +27,7 @@ void inicializar_memoria(int tam_mem, int tam_pag) {
     tabla_de_marcos = calloc(cantidad_marcos, sizeof(PaginaMemoria));
     if (tabla_de_marcos == NULL) {
         log_error(logger_worker, "Error fatal: calloc falló para tabla_de_marcos");
+        free(memoria_principal);
         exit(EXIT_FAILURE);
     }
 
@@ -47,7 +48,10 @@ static int obtener_marco_libre() {
     return -1; // No hay marcos libres
 }
 
-static int reemplazar_pagina(int query_id, int socket_storage) {
+static int reemplazar_pagina(int query_id, int socket_storage,
+                             const char* nuevo_file,
+                             const char* nuevo_tag,
+                             int nuevo_num_pagina) {
     int marco_victima = -1;
     
     if (strcasecmp(worker_configs.algoritmoreemplazo, "LRU") == 0) {
@@ -103,12 +107,11 @@ static int reemplazar_pagina(int query_id, int socket_storage) {
         marco_victima = 0;
     }
     
-    // marco_victima = 0; 
     
     PaginaMemoria* victima = &tabla_de_marcos[marco_victima];
 
-    log_info(logger_worker, "## Query %d: Reemplazo - Página candidata: File %s:%s Pagina %d en Marco %d", 
-             query_id, victima->file, victima->tag, victima->num_pagina, marco_victima);
+    log_info(logger_worker, "## Query %d: Se reemplaza la página %s:%s/%d por la %s:%s/%d", 
+             query_id, victima->file, victima->tag, victima->num_pagina, nuevo_file, nuevo_tag, nuevo_num_pagina);
 
     if (victima->modificado) {
         log_info(logger_worker, "La página víctima (Marco %d) está modificada. Se escribe a Storage (FLUSH).", marco_victima);
@@ -138,7 +141,8 @@ static int reemplazar_pagina(int query_id, int socket_storage) {
     victima->tag[0] = '\0';
     victima->num_pagina = -1;
 
-    log_info(logger_worker, "## Query %d: Se libera el Marco: %d", query_id, marco_victima);
+    log_info(logger_worker, "Query %d: Se libera el Marco: %d perteneciente al - File: %s - Tag: %s",
+             query_id, marco_victima, victima->file, victima->tag);
 
     return marco_victima;
 }
@@ -166,21 +170,21 @@ void escribir_en_memoria(int query_id, const char* file, const char* tag, int di
     
     if (marco == -1) {
         // --- PAGE FAULT ---
-        log_info(logger_worker, "## Query %d: (WRITE) Memoria Miss - File: %s - Tag: %s Pagina: %d", 
+        log_info(logger_worker, "## Query %d: (WRITE) - Memoria Miss - File: %s - Tag: %s - Pagina: %d", 
                  query_id, file, tag, num_pagina);
         
         marco = obtener_marco_libre();
         if (marco == -1) {
-            marco = reemplazar_pagina(query_id, socket_storage);
+            marco =  reemplazar_pagina(query_id, socket_storage, file, tag, num_pagina);
         }
         
         // Si es un WRITE y hay miss, igual hay que traer el bloque?
         // Por ahora, simulamos que lo traemos (cargamos basura o ceros)
         // Llamar a leer_de_storage si el write no es de bloque completo
-        log_info(logger_worker, "## Query %d: (WRITE) Memoria Add - File: %s - Tag: %s Pagina: %d Marco: %d",
+        log_info(logger_worker, "## Query %d: (WRITE) - Memoria Add - File: %s - Tag: %s - Pagina: %d - Marco: %d",
                  query_id, file, tag, num_pagina, marco);
     } else {
-        log_info(logger_worker, "## Query %d: (WRITE) Memoria Hit - File: %s - Tag: %s Pagina: %d Marco: %d",
+        log_info(logger_worker, "## Query %d: (WRITE) - Memoria Hit - File: %s - Tag: %s - Pagina: %d - Marco: %d",
                  query_id, file, tag, num_pagina, marco);
     }    
 
@@ -203,7 +207,7 @@ void escribir_en_memoria(int query_id, const char* file, const char* tag, int di
     strncpy(pagina_info->file, file, MAX_FILETAG - 1);
     strncpy(pagina_info->tag, tag, MAX_FILETAG - 1);
 
-    log_info(logger_worker, "## Query %d: Se asigna el Marco: %d a la Página: %d perteneciente al File: %s Tag: %s",
+    log_info(logger_worker, "## Query %d: Se asigna el Marco: %d a la Página: %d perteneciente al - File: %s - Tag: %s",
              query_id, marco, num_pagina, file, tag);
 }
 
@@ -216,12 +220,12 @@ char* leer_de_memoria(int query_id, const char* file, const char* tag, int direc
 
     if (marco == -1) {
         // --- PAGE FAULT ---
-        log_info(logger_worker, "## Query %d: (READ) Memoria Miss - File: %s - Tag: %s Pagina: %d", 
+        log_info(logger_worker, "## Query %d: (READ) - Memoria Miss - File: %s - Tag: %s - Pagina: %d", 
                  query_id, file, tag, num_pagina);
         
         marco = obtener_marco_libre();
         if (marco == -1) { // No hay marcos libres, hay que reemplazar
-            marco = reemplazar_pagina(query_id, socket_storage);
+             marco = reemplazar_pagina(query_id, socket_storage, file, tag, num_pagina);
         }
 
         // 2. Pedir el bloque al Storage

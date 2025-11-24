@@ -173,7 +173,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
             continue;
         }
 
-        log_info(logger_worker, "## Query %d: FETCH Program Counter: %d - %s", query_id, pc_actual, instruccion);
+        log_info(logger_worker, "## Query %d: FETCH - Program Counter: %d - %s", query_id, pc_actual, instruccion);
         usleep(worker_configs.retardomemoria * 1000);
         
         char* file_tag_str;
@@ -328,7 +328,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
         }
 
         //esperar_retardo();
-        log_info(logger_worker, "## Query %d: Instrucción realizada: %s", query_id, linea_copy);
+        log_info(logger_worker, "## Query %d: - Instrucción realizada: %s", query_id, linea_copy);
         free(linea_copy); 
         pc_actual++;
     }

@@ -18,6 +18,7 @@
         "stdint.h": "c",
         "worker-log.h": "c",
         "stdbool.h": "c",
-        "worker_interpreter.h": "c"
+        "worker_interpreter.h": "c",
+        "unistd.h": "c"
     }
 }
