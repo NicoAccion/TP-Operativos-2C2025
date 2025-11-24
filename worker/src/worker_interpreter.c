@@ -5,12 +5,34 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 
-uint32_t query_actual_id = 0;
-uint32_t query_actual_pc = 0;
-bool ejecutando_query = false;
-bool desalojar_actual = false;
-bool desconexion_actual = false;
+// --- Variables Globales --- 
+uint32_t query_actual_id = 0; 
+uint32_t query_actual_pc = 0; 
+bool ejecutando_query = false; 
+bool desalojar_actual = false; 
+bool desconexion_actual = false; 
+
+// --- Sincronización ---
+pthread_mutex_t mutex_flags;
+
+void inicializar_estructuras_globales() {
+
+    query_actual_id = 0;
+    query_actual_pc = 0;
+    ejecutando_query = false;
+    desalojar_actual = false;
+    desconexion_actual = false;
+
+    pthread_mutex_init(&mutex_flags, NULL);
+}
+
+void destruir_estructuras_globales() {
+
+    pthread_mutex_destroy(&mutex_flags);
+}
+
 
 /**
  * @brief Envía una operación simple (CREATE, WRITE, TRUNCATE, etc.) y espera una respuesta OK/ERROR.
@@ -72,10 +94,15 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
         return;
     }
 
+
     // Inicializo estado global
+    pthread_mutex_lock(&mutex_flags);
     query_actual_id = query_id;
     query_actual_pc = 0;
     ejecutando_query = true;
+    desalojar_actual = false;
+    desconexion_actual = false;
+    pthread_mutex_unlock(&mutex_flags);
 
 
     char linea[256];
@@ -90,7 +117,12 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
 
     while (!fin && fgets(linea, sizeof(linea), archivo)) {
 
-        if (desalojar_actual) {
+        pthread_mutex_lock(&mutex_flags);
+        bool hay_desalojar = desalojar_actual;
+        bool hay_desconexion = desconexion_actual;
+        pthread_mutex_unlock(&mutex_flags);
+
+        if (hay_desalojar) {
             log_info(logger_worker, "## Query %d: Desalojo solicitado (PC=%d)", query_actual_id, pc_actual);
 
             // paquete con el Program Counter actual
@@ -99,28 +131,32 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
             t_paquete* paquete_pc = empaquetar_buffer(DESALOJO_PRIORIDADES, buffer_pc);
             enviar_paquete(socket_master, paquete_pc);
 
+            pthread_mutex_lock(&mutex_flags);
             desalojar_actual = false;
             desconexion_actual = false;
             ejecutando_query = false;
             query_actual_id = 0;
             query_actual_pc = 0;
+            pthread_mutex_unlock(&mutex_flags);
 
             fclose(archivo);
             return;  // Termina la ejecución sin marcar fin de Query
         }
 
-        if (desconexion_actual) {
+        if (hay_desconexion) {
 
             log_info(logger_worker, "Se desconectó la query, %d", query_actual_id);
             t_buffer* buffer = serializar_operacion_end("DESCONEXION QUERY");
             t_paquete* paquete = empaquetar_buffer(END, buffer);
             enviar_paquete(socket_master, paquete);
 
+            pthread_mutex_lock(&mutex_flags);
             desalojar_actual = false;
             desconexion_actual = false;
             ejecutando_query = false;
             query_actual_id = 0;
             query_actual_pc = 0;
+            pthread_mutex_unlock(&mutex_flags);
 
             fclose(archivo);
             return;
@@ -226,9 +262,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                 }
                 free(file_name_local);
                 free(tag_name_local);
-            }
-            // Aquí podrías enviar el contenido leído al Master
-            // enviar_mensaje("Resultado de READ", socket_master);
+            } 
         }
 
         // ==== TAG ====
@@ -301,8 +335,10 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
 
     fclose(archivo);
 
+    pthread_mutex_lock(&mutex_flags);
     ejecutando_query = false;
     desalojar_actual = false;
     query_actual_id = 0;
     query_actual_pc = 0;
+    pthread_mutex_unlock(&mutex_flags);
 }
