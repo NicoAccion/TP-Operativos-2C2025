@@ -114,22 +114,20 @@ static int reemplazar_pagina(int query_id, int socket_storage,
              query_id, victima->file, victima->tag, victima->num_pagina, nuevo_file, nuevo_tag, nuevo_num_pagina);
 
     if (victima->modificado) {
-        log_info(logger_worker, "La página víctima (Marco %d) está modificada. Se escribe a Storage (FLUSH).", marco_victima);
+        log_info(logger_worker, "La página víctima (Marco %d) está modificada. FLUSH a Storage.", marco_victima);
         
-        // Usamos la operación WRITE del storage
         t_op_storage* op_flush = calloc(1, sizeof(t_op_storage));
         op_flush->query_id = query_id;
         op_flush->nombre_file = strdup(victima->file);
         op_flush->nombre_tag = strdup(victima->tag);
-        op_flush->direccion_base = victima->num_pagina; // El nro_bloque_logico
+        op_flush->direccion_base = victima->num_pagina;
         
-        // Creamos un buffer temporal para el contenido del marco
+        // cambio bin
+        op_flush->tamano_contenido = tam_pagina; 
         op_flush->contenido = malloc(tam_pagina);
         memcpy(op_flush->contenido, memoria_principal + (marco_victima * tam_pagina), tam_pagina);
 
-        // Llamamos a la función 
         enviar_op_simple_storage(socket_storage, WRITE, op_flush);
-        // (La función `enviar_op_simple_storage` ya libera `op_flush` y su contenido)
     }
 
     // Liberar marco para su reutilización
@@ -284,4 +282,37 @@ char* leer_de_memoria(int query_id, const char* file, const char* tag, int direc
              query_id, direccion_fisica, valor_leido);
 
     return valor_leido;
+}
+
+// 1. Nueva función auxiliar para hacer FLUSH de páginas 
+void realizar_flush_file(int query_id, const char* file, const char* tag, int socket_storage) {
+    for (int i = 0; i < cantidad_marcos; i++) {
+        // Si file/tag son NULL, flushea TODO (útil para desalojo)
+        // Si tienen valor, solo flushea las páginas de ese archivo (útil para COMMIT)
+        bool es_el_archivo = (file == NULL && tag == NULL) || 
+                             (tabla_de_marcos[i].ocupado && 
+                              strcmp(tabla_de_marcos[i].file, file) == 0 && 
+                              strcmp(tabla_de_marcos[i].tag, tag) == 0);
+
+        if (es_el_archivo && tabla_de_marcos[i].modificado) {
+            log_info(logger_worker, "## Query %d: FLUSH Implícito Marco %d (File: %s Pagina: %d)", 
+                     query_id, i, tabla_de_marcos[i].file, tabla_de_marcos[i].num_pagina);
+            
+            t_op_storage* op_flush = calloc(1, sizeof(t_op_storage));
+            op_flush->query_id = query_id;
+            op_flush->nombre_file = strdup(tabla_de_marcos[i].file);
+            op_flush->nombre_tag = strdup(tabla_de_marcos[i].tag);
+            op_flush->direccion_base = tabla_de_marcos[i].num_pagina;
+            
+            // bin
+            op_flush->tamano_contenido = tam_pagina; // Escribimos toda la página
+            op_flush->contenido = malloc(tam_pagina);
+            memcpy(op_flush->contenido, memoria_principal + (i * tam_pagina), tam_pagina);
+
+            enviar_op_simple_storage(socket_storage, WRITE, op_flush);
+            
+            // Marcamos como limpio
+            tabla_de_marcos[i].modificado = false; 
+        }
+    }
 }

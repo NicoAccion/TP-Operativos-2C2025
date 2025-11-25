@@ -62,8 +62,9 @@ char* build_blocks_string(char** bloques_actuales, int count_actual, int count_n
 void chequear_y_liberar_bloque_fisico(int query_id, char* nro_bloque_fisico_str);
 char* array_to_blocks_string(char** bloques_array, int count); //seria como un string_join
 
-void escribir_en_bloque_fisico(char* path_bloque_fisico, char* contenido, int block_size);
+void escribir_en_bloque_fisico(char* path_bloque_fisico, void* contenido, int tamano_contenido, int block_size);
 int encontrar_bloque_libre_mock(int query_id);
+int reservar_bloque_real(int query_id);
 // ... (Aquí irían las de READ y WRITE) ...
 
 t_codigo_operacion storage_op_write(t_op_storage* op);
