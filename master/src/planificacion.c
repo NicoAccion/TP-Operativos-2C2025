@@ -38,7 +38,7 @@ void fifo(){
 
 void prioridades(){
     while (1) {
-        //Se habilita cuando entra un query a ready o cuando se libera un worker
+        //Se habilita cuando entra un query a ready, cuando se libera un worker o después de realizar el aging
         sem_wait(&sem_planificar_prioridad);
 
         //Primero reviso que haya almenos una query en ready y un worker conectado
@@ -153,5 +153,6 @@ void* aging(){
             }
         }
         pthread_mutex_unlock(&mutex_ready);
+        sem_post(&sem_planificar_prioridad);
     }
 }

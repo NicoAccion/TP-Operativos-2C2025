@@ -1,4 +1,9 @@
 #include "storage_conexiones.h"
+#include <pthread.h>
+
+// --- Variables Globales para contar Workers ---
+static int cantidad_workers_conectados = 0;
+pthread_mutex_t mutex_conteo_workers = PTHREAD_MUTEX_INITIALIZER;
 
 // Renombramos "atender_worker" a "gestionar_conexion_worker"
 void* gestionar_conexion_worker(void* arg) {
@@ -14,10 +19,18 @@ void* gestionar_conexion_worker(void* arg) {
         close(socket_worker);
         return NULL;
     }
-    worker_id = deserializar_worker(paquete_handshake->buffer);
-    log_info(logger_storage, "## Se conecta el Worker %d Cantidad de Workers: <CANTIDAD_MOCK>", worker_id); 
+    worker_id = deserializar_worker(paquete_handshake->buffer); 
     liberar_paquete(paquete_handshake);
-    
+
+    //Cant workers
+    pthread_mutex_lock(&mutex_conteo_workers);
+    cantidad_workers_conectados++;
+    int total_actual = cantidad_workers_conectados; // Copia local
+    pthread_mutex_unlock(&mutex_conteo_workers);
+
+    // Logueamos con el valor real
+    log_info(logger_storage, "## Se conecta el Worker %d Cantidad de Workers: %d", worker_id, total_actual);
+
     t_buffer* buffer_rta_handshake = buffer_create(sizeof(uint32_t));
     buffer_add_uint32(buffer_rta_handshake, superblock_configs.blocksize);
     t_paquete* paquete_rta_handshake = empaquetar_buffer(HANDSAHKE_STORAGE_RTA, buffer_rta_handshake);
@@ -30,8 +43,13 @@ void* gestionar_conexion_worker(void* arg) {
         t_paquete* paquete = recibir_paquete(socket_worker);
 
         if (paquete == NULL) {
-            log_info(logger_storage, "## Se desconecta el Worker %d Cantidad de Workers: <CANTIDAD_MOCK>", worker_id); 
-            break; 
+            pthread_mutex_lock(&mutex_conteo_workers);
+            cantidad_workers_conectados--;
+            total_actual = cantidad_workers_conectados;
+            pthread_mutex_unlock(&mutex_conteo_workers);
+
+            // Logueamos la desconexion
+            log_info(logger_storage, "## Se desconecta el Worker %d Cantidad de Workers: %d", worker_id, total_actual);
         }
 
         t_codigo_operacion op_respuesta = OP_OK; 
@@ -76,6 +94,9 @@ void* gestionar_conexion_worker(void* arg) {
                     t_op_storage op_rta;
                     op_rta.contenido = contenido_leido; 
                     
+                    // Como leemos bloques completos, el tamaño es el BLOCK_SIZE
+                    op_rta.tamano_contenido = superblock_configs.blocksize;
+
                     t_buffer* buffer_rta = serializar_op_storage(&op_rta, READ_RTA);
                     t_paquete* paq_rta = empaquetar_buffer(READ_RTA, buffer_rta);
                     enviar_paquete(socket_worker, paq_rta);
