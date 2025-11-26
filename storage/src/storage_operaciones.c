@@ -531,8 +531,7 @@ t_codigo_operacion storage_op_commit(t_op_storage* op) {
 
 t_codigo_operacion storage_op_write(t_op_storage* op) {
     
-    // Asumimos que `direccion_base` es el `nro_bloque_logico`
-    int nro_bloque_logico = op->direccion_base; 
+    int nro_bloque_logico = op->direccion_base / superblock_configs.blocksize;
     
     // 1. Armar paths
     char* path_tag = string_from_format("%s/files/%s/%s", 
