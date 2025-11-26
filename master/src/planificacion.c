@@ -138,18 +138,29 @@ void* menor_prioridad(void* arg1, void* arg2){
 }
 
 void* aging(){
-    while (1) {
-        // Espera un intervalo en milisegundos
-        usleep(master_configs.tiempoaging * 1000);
+
+    //Inicio el cronómetro general
+    t_temporal* cronometro = temporal_create();
+
+    int64_t aging_en_milisegundos = master_configs.tiempoaging * 1000;
+
+    while (1){
+
+        usleep(50 * 1000);
+
+        int64_t ahora = temporal_gettime(cronometro);
 
         //Aumenta la prioridad de las queries en ready
         pthread_mutex_lock(&mutex_ready);
         for(int i = 0; i < list_size(ready); i++) {
             t_query_completa* query = list_get(ready, i);
-            if (query->prioridad > 0) {
+
+            int64_t espera = ahora - query->entrada_a_ready;
+            if (query->prioridad > 1 && espera >= aging_en_milisegundos) {
                 query->prioridad--;
                 log_info(logger_master, "##%d Cambio de prioridad: %d - %d", 
                          query->id_query, query->prioridad + 1, query->prioridad);
+                query->entrada_a_ready = ahora;
             }
         }
         pthread_mutex_unlock(&mutex_ready);

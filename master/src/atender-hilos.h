@@ -6,6 +6,7 @@
 #include <utils/serializacion.h>
 
 #include <commons/collections/list.h>
+#include <commons/temporal.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <stdbool.h>
@@ -30,6 +31,9 @@ extern sem_t sem_queries_en_ready;
 extern sem_t sem_workers_libres;
 extern sem_t sem_planificar_prioridad;
 
+// Cronómetro
+extern t_temporal* cronometro;
+
 /*//////////////////////////////////////////////////////////////////////////////////////////////////
 
                                         Estructuras
@@ -53,7 +57,8 @@ typedef struct {
     uint32_t prioridad;
     uint32_t id_query;
     t_estado estado;
-    uint32_t program_counter; 
+    uint32_t program_counter;
+    int64_t entrada_a_ready;
 } t_query_completa;
 
 /**

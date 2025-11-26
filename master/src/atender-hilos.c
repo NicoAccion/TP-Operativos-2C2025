@@ -7,6 +7,8 @@ t_list* ready;
 t_list* exec;
 t_list* workers;
 
+t_temporal* cronometro;
+
 // --- Sincronización ---
 pthread_mutex_t mutex_ready;
 pthread_mutex_t mutex_exec;
@@ -21,6 +23,8 @@ void inicializar_estructuras_globales() {
     ready = list_create();
     exec = list_create();
     workers = list_create();
+
+    cronometro = temporal_create();
 
     pthread_mutex_init(&mutex_ready, NULL);
     pthread_mutex_init(&mutex_exec, NULL);
@@ -107,6 +111,7 @@ void atender_query_control(int socket_cliente, t_paquete* paquete) {
     }
     if(strcmp(master_configs.algoritmoplanificacion, "PRIORIDADES") == 0){
         sem_post(&sem_planificar_prioridad);
+        query_completa->entrada_a_ready = temporal_gettime(cronometro);
     }
 
     // 6. Verifica si se desconecta el Query Control
@@ -319,6 +324,7 @@ void atender_worker(int socket_cliente, t_paquete* paquete) {
                     pthread_mutex_unlock(&mutex_ready);
 
                     worker->query_asignada->estado = READY;
+                    worker->query_asignada->entrada_a_ready = temporal_gettime(cronometro);
 
                     //Loggeo el desalojo
                     log_info(logger_master, "## Se desaloja la Query %d (%d) del Worker %d - Motivo: PRIORIDAD",
@@ -328,6 +334,7 @@ void atender_worker(int socket_cliente, t_paquete* paquete) {
 
                     //Habilita al planificador                 
                     sem_post(&sem_planificar_prioridad);
+                    
                     
                     //Libero memoria
                     free(query);
