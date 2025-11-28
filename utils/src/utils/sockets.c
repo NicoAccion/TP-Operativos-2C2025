@@ -132,12 +132,12 @@ void enviar_mensaje(const char* mensaje, int socket) {
     //Tamanio del string +1 para el /0
     int size = strlen(mensaje) + 1;
     //Envio tamanio del string y chequeo errores
-    if(send(socket, &size, sizeof(int), 0) == -1){
+    if(send(socket, &size, sizeof(int), MSG_NOSIGNAL) == -1){
         fprintf(stderr, "Error al enviar tamanio del mensaje: %s\n", strerror(errno));
         return;
     } 
     //Envio mensaje y chequeo errores
-    if (send(socket, mensaje, size, 0) == -1){
+    if (send(socket, mensaje, size, MSG_NOSIGNAL) == -1){
         fprintf(stderr, "Error al enviar mensaje: %s\n", strerror(errno));
         return;
     }

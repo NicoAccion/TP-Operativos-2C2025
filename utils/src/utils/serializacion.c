@@ -109,7 +109,7 @@ int enviar_paquete(int socket, t_paquete* paquete){
     //Arma el stream a partir del paquete, que contiene un codigo de operacion y un buffer
     void* stream = stream_para_enviar(paquete);
     //Envia el stream al socket recibido por parametro
-    if(send(socket, stream, paquete->buffer->size + sizeof(t_codigo_operacion) + sizeof(uint32_t), 0) == -1){
+    if(send(socket, stream, paquete->buffer->size + sizeof(t_codigo_operacion) + sizeof(uint32_t), MSG_NOSIGNAL) == -1){
         liberar_paquete(paquete); //Libera el paquete recibido por parametro porque fallo el envio
         free(stream); //Libera el stream creado despues de enviarlo porque fallo el envio
         return -1;
