@@ -141,6 +141,7 @@ void atender_query_control(int socket_cliente, t_paquete* paquete) {
                     //Elimino el worker de la lista de workers
                     pthread_mutex_lock(&mutex_workers);
                     list_remove_element(workers, worker);
+                    cantidad_workers --;
                     pthread_mutex_unlock(&mutex_workers);
 
                     //Cierro la conexión del worker
