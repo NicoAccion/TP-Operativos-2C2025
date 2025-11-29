@@ -531,8 +531,8 @@ t_codigo_operacion storage_op_commit(t_op_storage* op) {
 
 t_codigo_operacion storage_op_write(t_op_storage* op) {
     
-    int nro_bloque_logico = op->direccion_base / superblock_configs.blocksize;
-    
+    //int nro_bloque_logico = op->direccion_base / superblock_configs.blocksize;
+    int nro_bloque_logico = op->direccion_base; 
     // 1. Armar paths
     char* path_tag = string_from_format("%s/files/%s/%s", 
                                       storage_configs.puntomontaje, op->nombre_file, op->nombre_tag);
@@ -675,6 +675,8 @@ t_codigo_operacion storage_op_read(t_op_storage* op, char** contenido_leido) {
                                                     storage_configs.puntomontaje, 
                                                     atoi(nro_bloque_fisico_str));
 
+    usleep(storage_configs.retardoaccesobloque * 1000);
+
     int fd = open(path_bloque_fisico, O_RDONLY);
     if (fd == -1) {
         log_error(logger_storage, "##%d READ Error: No se pudo abrir bloque físico %s", op->query_id, nro_bloque_fisico_str);
@@ -809,6 +811,9 @@ int encontrar_bloque_libre_mock(int query_id) {
 
 // --- Helper para escribir en un bloque físico ---
 void escribir_en_bloque_fisico(char* path_bloque_fisico, void* contenido, int tamano_contenido, int block_size) {
+
+    usleep(storage_configs.retardoaccesobloque * 1000);
+
     int fd = open(path_bloque_fisico, O_RDWR);
     if (fd == -1) {
         log_error(logger_storage, "WRITE_HELPER: No se pudo abrir %s", path_bloque_fisico);

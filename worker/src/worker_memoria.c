@@ -17,7 +17,7 @@ static int tam_pagina;
 static int puntero_clock = 0;
 
 void inicializar_memoria(int tam_mem, int tam_pag) {
-    memoria_principal = malloc(tam_mem);
+    memoria_principal = calloc(1, tam_mem);
     if (memoria_principal == NULL) {
         log_error(logger_worker, "Error fatal: malloc falló para memoria_principal");
         exit(EXIT_FAILURE);
