@@ -154,7 +154,7 @@ void* aging(){
             t_query_completa* query = list_get(ready, i);
 
             int64_t espera = ahora - query->entrada_a_ready;
-            if (query->prioridad > 1 && espera >= master_configs.tiempoaging) {
+            if (query->prioridad > 0 && espera >= master_configs.tiempoaging) {
                 query->prioridad--;
                 log_info(logger_master, "##%d Cambio de prioridad: %d - %d", 
                          query->id_query, query->prioridad + 1, query->prioridad);

@@ -19,6 +19,8 @@
         "worker-log.h": "c",
         "stdbool.h": "c",
         "worker_interpreter.h": "c",
-        "unistd.h": "c"
+        "unistd.h": "c",
+        "time.h": "c",
+        "stdio.h": "c"
     }
 }

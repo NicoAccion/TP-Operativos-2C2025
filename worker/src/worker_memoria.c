@@ -53,6 +53,7 @@ static int reemplazar_pagina(int query_id, int socket_storage,
                              const char* nuevo_tag,
                              int nuevo_num_pagina) {
     int marco_victima = -1;
+log_warning(logger_worker, "algoritmo: %s", worker_configs.algoritmoreemplazo);
     
     if (strcasecmp(worker_configs.algoritmoreemplazo, "LRU") == 0) {
         // LRU

@@ -130,6 +130,12 @@ void atender_query_control(int socket_cliente, t_paquete* paquete) {
                 //Verifico si el worker se desconectó
                 if(enviar_paquete(worker->socket_cliente, paquete_worker) == -1){
 
+                    //Elimino el worker de la lista de workers
+                    pthread_mutex_lock(&mutex_workers);
+                    list_remove_element(workers, worker);
+                    cantidad_workers --;
+                    pthread_mutex_unlock(&mutex_workers);
+
                     //Loggeo la desconexión
                     pthread_mutex_lock(&mutex_workers);
                     cantidad_workers = list_size(workers);
@@ -137,12 +143,6 @@ void atender_query_control(int socket_cliente, t_paquete* paquete) {
 
                     log_info(logger_master, "## Se desconecta el Worker %d - Se finaliza la Query %d - Cantidad total de Workers: %d ",
                          worker->id_worker, worker->query_asignada->id_query, cantidad_workers);
-
-                    //Elimino el worker de la lista de workers
-                    pthread_mutex_lock(&mutex_workers);
-                    list_remove_element(workers, worker);
-                    cantidad_workers --;
-                    pthread_mutex_unlock(&mutex_workers);
 
                     //Cierro la conexión del worker
                     close(worker->socket_cliente);

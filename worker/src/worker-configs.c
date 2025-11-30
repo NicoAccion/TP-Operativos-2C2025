@@ -23,7 +23,7 @@ int inicializar_configs(char* path_config){
     configcargado.puertostorage = cargar_variable_int(worker_tconfig, "PUERTO_STORAGE");
     configcargado.tammemoria = cargar_variable_int(worker_tconfig, "TAM_MEMORIA");
     configcargado.retardomemoria = cargar_variable_int(worker_tconfig, "RETARDO_MEMORIA");
-    configcargado.algoritmoreemplazo = cargar_variable_string(worker_tconfig, "ALGORRITMO_REEMPLAZO");
+    configcargado.algoritmoreemplazo = cargar_variable_string(worker_tconfig, "ALGORITMO_REEMPLAZO");
     configcargado.pathqueries = cargar_variable_string(worker_tconfig, "PATH_QUERIES");
     configcargado.loglevel = cargar_variable_string(worker_tconfig, "LOG_LEVEL");
 
