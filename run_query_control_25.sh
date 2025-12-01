@@ -33,8 +33,18 @@ if [[ ! -x "$BIN" ]]; then
   exit 1
 fi
 
+echo "Lanzando $COUNT ejecuciones en paralelo..."
+pids=()
 for i in $(seq 1 "$COUNT"); do
   echo "[$i/$COUNT] Ejecutando query_control..."
-  "$BIN" "$CONFIG_FILE" "$ARG_QUERY" "$PRIORITY"
-  (( SLEEP_SECS > 0 )) && sleep "$SLEEP_SECS"
+  "$BIN" "$CONFIG_FILE" "$QUERY_FILE" "$PRIORITY" &
+  pids+=("$!")
+  (( SLEEP_SECS > 0 )) && sleep "$SLEEP_SECS" # delay opcional entre lanzamientos
 done
+
+echo "Esperando a que terminen las ejecuciones..."
+for pid in "${pids[@]}"; do
+  wait "$pid"
+done
+
+echo "Listo: $COUNT ejecuciones completadas."
