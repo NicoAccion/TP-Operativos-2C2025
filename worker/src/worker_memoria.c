@@ -49,11 +49,11 @@ static int obtener_marco_libre() {
 }
 
 static int reemplazar_pagina(int query_id, int socket_storage,
+                             int socket_master,
                              const char* nuevo_file,
                              const char* nuevo_tag,
                              int nuevo_num_pagina) {
     int marco_victima = -1;
-log_warning(logger_worker, "algoritmo: %s", worker_configs.algoritmoreemplazo);
     
     if (strcasecmp(worker_configs.algoritmoreemplazo, "LRU") == 0) {
         // LRU
@@ -143,7 +143,7 @@ log_warning(logger_worker, "algoritmo: %s", worker_configs.algoritmoreemplazo);
         op_flush->contenido = malloc(tam_pagina);
         memcpy(op_flush->contenido, memoria_principal + (marco_victima * tam_pagina), tam_pagina);
 
-        enviar_op_simple_storage(socket_storage, WRITE, op_flush);
+        enviar_op_simple_storage(socket_storage, socket_master, WRITE, op_flush);
     }
 
     // Liberar marco para su reutilización
@@ -175,13 +175,12 @@ static int buscar_pagina_en_memoria(const char* file, const char* tag, int num_p
     return -1; // Page Fault
 }
 
-void escribir_en_memoria(int query_id, const char* file, const char* tag, int direccion_logica, const char* contenido, int socket_storage) {
+void escribir_en_memoria(int query_id, const char* file, const char* tag, int direccion_logica, const char* contenido, int socket_storage, int socket_master) {
     int num_pagina = direccion_logica / tam_pagina;
     int offset = direccion_logica % tam_pagina;
     
     // 1. Buscar si la página ya está en memoria
     int marco = buscar_pagina_en_memoria(file, tag, num_pagina);
-    
     if (marco == -1) {
         // --- PAGE FAULT ---
         log_info(logger_worker, "## Query %d: (WRITE) Memoria Miss - File: %s - Tag: %s Pagina: %d", 
@@ -190,7 +189,7 @@ void escribir_en_memoria(int query_id, const char* file, const char* tag, int di
         marco = obtener_marco_libre();
         if (marco == -1) {
             // Pasamos los datos de la pagina NUEVA que queremos cargar para el log de reemplazo
-            marco = reemplazar_pagina(query_id, socket_storage, file, tag, num_pagina);
+            marco = reemplazar_pagina(query_id, socket_storage, socket_master, file, tag, num_pagina);
         }
         
         // Antes de escribir sobre el marco, debemos traer lo que ya existía en disco.
@@ -253,9 +252,19 @@ void escribir_en_memoria(int query_id, const char* file, const char* tag, int di
 
     log_info(logger_worker, "Query %d: Se asigna el Marco: %d a la Página: %d perteneciente al File: %s Tag: %s",
              query_id, marco, num_pagina, file, tag);
+
+    // 5. Enviar WRITE al Storage para validar y persistir el cambio
+    t_op_storage* op_write = calloc(1, sizeof(t_op_storage));
+    op_write->query_id = query_id;
+    op_write->nombre_file = strdup(file);
+    op_write->nombre_tag  = strdup(tag);
+    op_write->direccion_base = direccion_logica;
+    op_write->contenido = strdup(contenido);
+
+    enviar_op_simple_storage(socket_storage, socket_master, WRITE, op_write);
 }
 
-char* leer_de_memoria(int query_id, const char* file, const char* tag, int direccion_logica, int tamanio, int socket_storage) {
+char* leer_de_memoria(int query_id, const char* file, const char* tag, int direccion_logica, int tamanio, int socket_storage, int socket_master) {
     int num_pagina = direccion_logica / tam_pagina;
     int offset = direccion_logica % tam_pagina;
 
@@ -269,7 +278,7 @@ char* leer_de_memoria(int query_id, const char* file, const char* tag, int direc
         
         marco = obtener_marco_libre();
         if (marco == -1) { // No hay marcos libres, hay que reemplazar
-             marco = reemplazar_pagina(query_id, socket_storage, file, tag, num_pagina);
+             marco = reemplazar_pagina(query_id, socket_storage, socket_master, file, tag, num_pagina);
         }
 
         // 2. Pedir el bloque al Storage
@@ -331,7 +340,7 @@ char* leer_de_memoria(int query_id, const char* file, const char* tag, int direc
 }
 
 // 1. Nueva función auxiliar para hacer FLUSH de páginas 
-void realizar_flush_file(int query_id, const char* file, const char* tag, int socket_storage) {
+void realizar_flush_file(int query_id, const char* file, const char* tag, int socket_storage, int socket_master) {
     for (int i = 0; i < cantidad_marcos; i++) {
         // Si file/tag son NULL, flushea TODO (útil para desalojo)
         // Si tienen valor, solo flushea las páginas de ese archivo (útil para COMMIT)
@@ -355,7 +364,7 @@ void realizar_flush_file(int query_id, const char* file, const char* tag, int so
             op_flush->contenido = malloc(tam_pagina);
             memcpy(op_flush->contenido, memoria_principal + (i * tam_pagina), tam_pagina);
 
-            enviar_op_simple_storage(socket_storage, WRITE, op_flush);
+            enviar_op_simple_storage(socket_storage, socket_master, WRITE, op_flush);
             
             // Marcamos como limpio
             tabla_de_marcos[i].modificado = false; 

@@ -13,6 +13,7 @@ uint32_t query_actual_pc = 0;
 bool ejecutando_query = false; 
 bool desalojar_actual = false; 
 bool desconexion_actual = false; 
+bool error = false;
 
 // --- Sincronización ---
 pthread_mutex_t mutex_flags;
@@ -24,6 +25,7 @@ void inicializar_estructuras_globales() {
     ejecutando_query = false;
     desalojar_actual = false;
     desconexion_actual = false;
+    error = false;
 
     pthread_mutex_init(&mutex_flags, NULL);
 }
@@ -37,7 +39,7 @@ void destruir_estructuras_globales() {
 /**
  * @brief Envía una operación simple (CREATE, WRITE, TRUNCATE, etc.) y espera una respuesta OK/ERROR.
  */
-t_codigo_operacion enviar_op_simple_storage(int socket_storage, t_codigo_operacion op_code, t_op_storage* op) {
+t_codigo_operacion enviar_op_simple_storage(int socket_storage, int socket_master, t_codigo_operacion op_code, t_op_storage* op) {
     t_buffer* buffer = serializar_op_storage(op, op_code);
     t_paquete* paquete = empaquetar_buffer(op_code, buffer);
     enviar_paquete(socket_storage, paquete);
@@ -46,10 +48,59 @@ t_codigo_operacion enviar_op_simple_storage(int socket_storage, t_codigo_operaci
     t_paquete* paquete_rta = recibir_paquete(socket_storage);
     if (paquete_rta == NULL) {
         log_error(logger_worker, "Storage se desconectó inesperadamente.");
-        return OP_ERROR; 
+        return OP_ERROR;
     }
     t_codigo_operacion rta_code = paquete_rta->codigo_operacion;
-    log_info(logger_worker, "Recibida confirmación del Storage (op_code: %d)", rta_code);
+
+    t_buffer* buffer_error = NULL;
+    t_paquete* paquete_error = NULL;
+    
+    switch(rta_code){
+
+        case OP_OK:
+            log_info(logger_worker, "Recibida confirmación del Storage (op_code: %d)", rta_code);
+            break;
+
+        case FILE_TAG_INEXISTENTE:
+            buffer_error = serializar_operacion_end("FILE / TAG INEXISTENTE");
+            paquete_error = empaquetar_buffer(END, buffer_error);
+            enviar_paquete(socket_master, paquete_error);
+            error = true;
+            break;
+
+        case FILE_TAG_PREEXISTENTE:
+            buffer_error = serializar_operacion_end("FILE / TAG PREEXISTENTE");
+            paquete_error = empaquetar_buffer(END, buffer_error);
+            enviar_paquete(socket_master, paquete_error);
+            error = true;
+            break;
+
+        case ESPACIO_INSUFICIENTE:
+            buffer_error = serializar_operacion_end("ESPACIO INSUFICIENTE");
+            paquete_error = empaquetar_buffer(END, buffer_error);
+            enviar_paquete(socket_master, paquete_error);
+            error = true;
+            break;
+
+        case ESCRITURA_NO_PERMITIDA:
+            buffer_error = serializar_operacion_end("ESCRITURA NO PERMITIDA");
+            paquete_error = empaquetar_buffer(END, buffer_error);
+            enviar_paquete(socket_master, paquete_error);
+            error = true;
+            break;
+
+        case LECTURA_O_ESCRITURA_FUERA_DE_LIMITE:
+            buffer_error = serializar_operacion_end("LECTURA O ESCRITURA FUERA DE LIMITE");
+            paquete_error = empaquetar_buffer(END, buffer_error);
+            enviar_paquete(socket_master, paquete_error);
+            error = true;
+            break;
+
+        default:
+            log_warning(logger_worker, "## Código de operación inesperado (%d)", rta_code);
+            break;
+    }
+    
     liberar_paquete(paquete_rta);
     return rta_code;
 }
@@ -102,6 +153,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
     ejecutando_query = true;
     desalojar_actual = false;
     desconexion_actual = false;
+    error = false;
     pthread_mutex_unlock(&mutex_flags);
 
 
@@ -120,13 +172,14 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
         pthread_mutex_lock(&mutex_flags);
         bool hay_desalojar = desalojar_actual;
         bool hay_desconexion = desconexion_actual;
+        bool hay_error = error;
         pthread_mutex_unlock(&mutex_flags);
 
         if (hay_desalojar) {
             log_info(logger_worker, "## Query %d: Desalojo solicitado (PC=%d)", query_actual_id, pc_actual);
 
             // Antes de irse, guarda todo lo que esté "sucio" en memoria
-            realizar_flush_file(query_actual_id, NULL, NULL, socket_storage); 
+            realizar_flush_file(query_actual_id, NULL, NULL, socket_storage, socket_master); 
 
             // Paquete con el Program Counter actual
             t_query_ejecucion query_actualizada = {path_query, query_id, pc_actual};
@@ -137,6 +190,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
             pthread_mutex_lock(&mutex_flags);
             desalojar_actual = false;
             desconexion_actual = false;
+            error = false;
             ejecutando_query = false;
             query_actual_id = 0;
             query_actual_pc = 0;
@@ -156,6 +210,22 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
             pthread_mutex_lock(&mutex_flags);
             desalojar_actual = false;
             desconexion_actual = false;
+            error = false;
+            ejecutando_query = false;
+            query_actual_id = 0;
+            query_actual_pc = 0;
+            pthread_mutex_unlock(&mutex_flags);
+
+            fclose(archivo);
+            return;
+        }
+
+        if (hay_error){
+            
+            pthread_mutex_lock(&mutex_flags);
+            desalojar_actual = false;
+            desconexion_actual = false;
+            error = false;
             ejecutando_query = false;
             query_actual_id = 0;
             query_actual_pc = 0;
@@ -191,7 +261,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                 file_tag_copy = strdup(file_tag_str);
                 op_create->nombre_file = strdup(strtok(file_tag_copy, ":"));
                 op_create->nombre_tag  = strdup(strtok(NULL, ":"));
-                enviar_op_simple_storage(socket_storage, CREATE, op_create);
+                enviar_op_simple_storage(socket_storage, socket_master, CREATE, op_create);
                 free(file_tag_copy);
             }
         }
@@ -206,7 +276,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                 op_truncate->nombre_file = strdup(strtok(file_tag_copy, ":"));
                 op_truncate->nombre_tag  = strdup(strtok(NULL, ":"));
                 op_truncate->tamano = atoi(tamanio_str);
-                enviar_op_simple_storage(socket_storage, TRUNCATE, op_truncate);
+                enviar_op_simple_storage(socket_storage, socket_master, TRUNCATE, op_truncate);
                 free(file_tag_copy);
             }
         }
@@ -223,7 +293,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                 char* tag_local  = strdup(strtok(NULL, ":"));
                 
                 // LLAMADA A LA MMU 
-                escribir_en_memoria(query_id, file_local, tag_local, atoi(direccion), contenido, socket_storage);
+                escribir_en_memoria(query_id, file_local, tag_local, atoi(direccion), contenido, socket_storage, socket_master);
                 
                 free(file_local);
                 free(tag_local);
@@ -243,7 +313,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
 
                 // LLAMADA A LA MMU. Si hay Page Fault, mmu deberia encargarse
                 char* valor_leido = leer_de_memoria(query_id, file_local, tag_local, 
-                                                    atoi(direccion), atoi(tamanio), socket_storage);
+                                                    atoi(direccion), atoi(tamanio), socket_storage, socket_master);
                 
                 if (valor_leido != NULL) {
                     t_operacion_query op_read_rta;
@@ -280,7 +350,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                 op_tag->nombre_file_destino = strdup(strtok(file_tag_copy, ":"));
                 op_tag->nombre_tag_destino  = strdup(strtok(NULL, ":"));
                 free(file_tag_copy);
-                enviar_op_simple_storage(socket_storage, TAG, op_tag);
+                enviar_op_simple_storage(socket_storage, socket_master, TAG, op_tag);
             }
         }
 
@@ -293,7 +363,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                 char* tag_local  = strdup(strtok(NULL, ":"));
                 
                 // 1. FLUSH de páginas sucias de ESTE archivo
-                realizar_flush_file(query_id, file_local, tag_local, socket_storage);
+                realizar_flush_file(query_id, file_local, tag_local, socket_storage, socket_master);
                 
                 // 2. Enviar instrucción COMMIT
                 t_op_storage* op_commit = calloc(1, sizeof(t_op_storage));
@@ -301,7 +371,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                 op_commit->nombre_file = strdup(file_local);
                 op_commit->nombre_tag  = strdup(tag_local);
                 
-                enviar_op_simple_storage(socket_storage, COMMIT, op_commit);
+                enviar_op_simple_storage(socket_storage, socket_master, COMMIT, op_commit);
                 
                 free(file_local);
                 free(tag_local);
@@ -316,7 +386,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                 file_tag_copy = strdup(file_tag_str);
                 char* file_local = strdup(strtok(file_tag_copy, ":"));
                 char* tag_local  = strdup(strtok(NULL, ":"));
-                realizar_flush_file(query_id, file_local, tag_local, socket_storage);
+                realizar_flush_file(query_id, file_local, tag_local, socket_storage, socket_master);
                 free(file_local);
                 free(tag_local);
                 free(file_tag_copy);
@@ -332,7 +402,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                 op_delete->nombre_file = strdup(strtok(file_tag_copy, ":"));
                 op_delete->nombre_tag  = strdup(strtok(NULL, ":"));
                 free(file_tag_copy);
-                enviar_op_simple_storage(socket_storage, DELETE, op_delete);
+                enviar_op_simple_storage(socket_storage, socket_master, DELETE, op_delete);
             }
         }
         // ==== END ====
@@ -355,6 +425,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
     pthread_mutex_lock(&mutex_flags);
     ejecutando_query = false;
     desalojar_actual = false;
+    error = false;
     query_actual_id = 0;
     query_actual_pc = 0;
     pthread_mutex_unlock(&mutex_flags);

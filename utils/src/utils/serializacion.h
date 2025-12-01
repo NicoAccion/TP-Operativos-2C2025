@@ -38,13 +38,17 @@ typedef enum {
     TAG = 10,
     DESCONEXION_QUERY = 11,
     DESALOJO_PRIORIDADES = 12,
-    WRITE = 13,
-    FLUSH_PAGINA,
-    //Codigos de respuesta del storage
-    HANDSAHKE_STORAGE_RTA,
-    OP_OK,
-    OP_ERROR,
-    READ_RTA,
+    FILE_TAG_INEXISTENTE = 13,
+    FILE_TAG_PREEXISTENTE = 14,
+    ESPACIO_INSUFICIENTE = 15,
+    ESCRITURA_NO_PERMITIDA = 16,
+    LECTURA_O_ESCRITURA_FUERA_DE_LIMITE = 17,
+    WRITE = 18,
+    FLUSH_PAGINA = 19,
+    HANDSAHKE_STORAGE_RTA = 20,
+    OP_OK = 21,
+    OP_ERROR = 22,
+    READ_RTA = 23,
 } t_codigo_operacion;
 
 

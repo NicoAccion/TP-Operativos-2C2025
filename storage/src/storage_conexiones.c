@@ -126,8 +126,7 @@ void* gestionar_conexion_worker(void* arg) {
         liberar_paquete(paquete); 
 
         // Enviamos la respuesta (OK o ERROR)
-        t_buffer* buffer_respuesta = buffer_create(0); 
-        t_paquete* paquete_respuesta = empaquetar_buffer(op_respuesta, buffer_respuesta);
+        t_paquete* paquete_respuesta = empaquetar_buffer(op_respuesta, NULL);
         enviar_paquete(socket_worker, paquete_respuesta);
     }
 

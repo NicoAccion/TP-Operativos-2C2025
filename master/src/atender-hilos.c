@@ -284,6 +284,18 @@ void atender_worker(int socket_cliente, t_paquete* paquete) {
                         finalizar_query(worker->query_asignada);
                     }
 
+                    //En caso de algún error
+                    else {
+                        pthread_mutex_lock(&mutex_workers);
+                        cantidad_workers = list_size(workers);
+                        pthread_mutex_unlock(&mutex_workers);
+
+                        log_info(logger_master, "## Se desconecta un Query Control. Se finaliza la Query %d con prioridad %d. Nivel multiprocesamiento %d",
+                                 worker->query_asignada->id_query, worker->query_asignada->prioridad, cantidad_workers);
+
+                        enviar_paquete(worker->query_asignada->socket_cliente, paquete);
+                    }
+
                     free(motivo);
 
                     worker->libre = true;
@@ -347,7 +359,7 @@ void atender_worker(int socket_cliente, t_paquete* paquete) {
                     log_warning(logger_master, "## Código de operación inesperado (%d) recibido del Worker %d",
                     paquete->codigo_operacion, worker->id_worker);
                     liberar_paquete(paquete);
-                break;              
+                    break;              
             }
         }
     }

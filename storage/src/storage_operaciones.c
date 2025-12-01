@@ -34,7 +34,7 @@ t_codigo_operacion storage_op_create(t_op_storage* op) {
         free(path_tag);
         free(path_metadata);
         free(path_logical_blocks);
-        return OP_ERROR; // Devolvemos error
+        return FILE_TAG_PREEXISTENTE; // Devolvemos error
     }
 
     // 3. Crear las estructuras de directorios
@@ -77,7 +77,7 @@ t_codigo_operacion storage_op_truncate(t_op_storage* op) {
     if (op->tamano % superblock_configs.blocksize != 0) {
         log_error(logger_storage, "##%d Error: Tamaño de TRUNCATE (%d) no es múltiplo de BLOCK_SIZE (%d)",
                   op->query_id, op->tamano, superblock_configs.blocksize);
-        return OP_ERROR;
+        return LECTURA_O_ESCRITURA_FUERA_DE_LIMITE;
     }
 
     // 1. Armar paths
@@ -93,7 +93,7 @@ t_codigo_operacion storage_op_truncate(t_op_storage* op) {
     if (metadata == NULL) {
         log_error(logger_storage, "##%d Error: No se encontró metadata para %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
         free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
-        return OP_ERROR; // Error: File / Tag inexistente
+        return FILE_TAG_INEXISTENTE; // Error: File / Tag inexistente
     }
 
     // 3. Chequear estado "COMMITED" 
@@ -102,7 +102,7 @@ t_codigo_operacion storage_op_truncate(t_op_storage* op) {
         log_error(logger_storage, "##%d Error: No se puede truncar un File:Tag en estado COMMITED", op->query_id);
         config_destroy(metadata);
         free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
-        return OP_ERROR; // Error: Escritura no permitida
+        return ESCRITURA_NO_PERMITIDA; // Error: Escritura no permitida
     }
 
     // 4. Calcular bloques
@@ -219,7 +219,7 @@ t_codigo_operacion storage_op_tag(t_op_storage* op) {
         log_error(logger_storage, "##%d Error: No se encontró File/Tag origen %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
         free(path_tag_origen); free(path_metadata_origen); free(path_file_destino);
         free(path_tag_destino); free(path_metadata_destino); free(path_logical_blocks_destino);
-        return OP_ERROR;
+        return FILE_TAG_INEXISTENTE;
     }
 
     // 3. Validar Destino (File / Tag preexistente)
@@ -228,7 +228,7 @@ t_codigo_operacion storage_op_tag(t_op_storage* op) {
         config_destroy(metadata_origen);
         free(path_tag_origen); free(path_metadata_origen); free(path_file_destino);
         free(path_tag_destino); free(path_metadata_destino); free(path_logical_blocks_destino);
-        return OP_ERROR;
+        return FILE_TAG_PREEXISTENTE;
     }
 
     // 4. Crear directorios de Destino
@@ -251,7 +251,7 @@ t_codigo_operacion storage_op_tag(t_op_storage* op) {
         string_array_destroy(bloques_array);
         free(path_tag_origen); free(path_metadata_origen); free(path_file_destino);
         free(path_tag_destino); free(path_metadata_destino); free(path_logical_blocks_destino);
-        return OP_ERROR;
+        return ESPACIO_INSUFICIENTE;
     }
     
     fprintf(f_metadata_destino, "TAMAÑO=%s\n", tamano_str);
@@ -307,7 +307,7 @@ t_codigo_operacion storage_op_delete(t_op_storage* op) {
     if (metadata == NULL) {
         log_error(logger_storage, "##%d Error: No se encontró File/Tag %s:%s para eliminar", op->query_id, op->nombre_file, op->nombre_tag);
         free(path_file); free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
-        return OP_ERROR; // Error: File / Tag inexistente
+        return FILE_TAG_INEXISTENTE; // Error: File / Tag inexistente
     }
     
     // (chequear si está COMMITED?? se debe hacer
@@ -403,7 +403,7 @@ t_codigo_operacion storage_op_commit(t_op_storage* op) {
     if (metadata == NULL) {
         log_error(logger_storage, "##%d Error: No se encontró metadata para %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
         free(path_tag); free(path_metadata); free(path_logical_blocks_dir); free(path_hash_index);
-        return OP_ERROR; 
+        return FILE_TAG_INEXISTENTE; 
     }
 
     char* estado = config_get_string_value(metadata, "ESTADO");
@@ -420,7 +420,7 @@ t_codigo_operacion storage_op_commit(t_op_storage* op) {
          log_error(logger_storage, "##%d Error: No se pudo abrir blocks_hash_index.config", op->query_id);
          config_destroy(metadata);
          free(path_tag); free(path_metadata); free(path_logical_blocks_dir); free(path_hash_index);
-         return OP_ERROR;
+         return FILE_TAG_INEXISTENTE;
     }
 
     // 4. Iterar bloques lógicos
@@ -545,7 +545,7 @@ t_codigo_operacion storage_op_write(t_op_storage* op) {
     if (metadata == NULL) {
         log_error(logger_storage, "##%d WRITE Error: No se encontró metadata para %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
         free(path_tag); free(path_metadata); free(path_logical_blocks_dir); free(path_bloque_logico);
-        return OP_ERROR; // Error: File / Tag inexistente
+        return FILE_TAG_INEXISTENTE; // Error: File / Tag inexistente
     }
 
     // 3. Chequear estado "COMMITED"
@@ -554,7 +554,7 @@ t_codigo_operacion storage_op_write(t_op_storage* op) {
         log_error(logger_storage, "##%d WRITE Error: No se puede escribir en un File:Tag COMMITED", op->query_id);
         config_destroy(metadata);
         free(path_tag); free(path_metadata); free(path_logical_blocks_dir); free(path_bloque_logico);
-        return OP_ERROR; // Error: Escritura no permitida
+        return ESCRITURA_NO_PERMITIDA; // Error: Escritura no permitida
     }
     
     // 4. Chequear fuera de límite
@@ -566,7 +566,7 @@ t_codigo_operacion storage_op_write(t_op_storage* op) {
         config_destroy(metadata);
         string_array_destroy(bloques_array);
         free(path_tag); free(path_metadata); free(path_logical_blocks_dir); free(path_bloque_logico);
-        return OP_ERROR; // Error: Lectura o escritura fuera de limite
+        return LECTURA_O_ESCRITURA_FUERA_DE_LIMITE; // Error: Lectura o escritura fuera de limite
     }
     
     // 5. Lógica Copy-on-Write (CoW)
@@ -592,7 +592,7 @@ t_codigo_operacion storage_op_write(t_op_storage* op) {
             config_destroy(metadata);
             free(path_tag); free(path_metadata); free(path_logical_blocks_dir); 
             free(path_bloque_logico); free(path_bloque_fisico_actual);
-            return OP_ERROR; 
+            return ESPACIO_INSUFICIENTE; 
         }
         
         char* path_nuevo_bloque_fisico = string_from_format("%s/physical_blocks/block%04d.dat", 
@@ -654,7 +654,7 @@ t_codigo_operacion storage_op_read(t_op_storage* op, char** contenido_leido) {
     if (metadata == NULL) {
         log_error(logger_storage, "##%d READ Error: No se encontró metadata para %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
         free(path_tag); free(path_metadata);
-        return OP_ERROR; // Error: File / Tag inexistente
+        return FILE_TAG_INEXISTENTE; // Error: File / Tag inexistente
     }
     
     // 3. Chequear fuera de límite
@@ -666,7 +666,7 @@ t_codigo_operacion storage_op_read(t_op_storage* op, char** contenido_leido) {
         config_destroy(metadata);
         string_array_destroy(bloques_array);
         free(path_tag); free(path_metadata);
-        return OP_ERROR; // Error: Lectura o escritura fuera de limite
+        return LECTURA_O_ESCRITURA_FUERA_DE_LIMITE; // Error: Lectura o escritura fuera de limite
     }
     
     // 4. Leer el bloque físico
@@ -678,12 +678,12 @@ t_codigo_operacion storage_op_read(t_op_storage* op, char** contenido_leido) {
     usleep(storage_configs.retardoaccesobloque * 1000);
 
     int fd = open(path_bloque_fisico, O_RDONLY);
-    if (fd == -1) {
+/*    if (fd == -1) {
         log_error(logger_storage, "##%d READ Error: No se pudo abrir bloque físico %s", op->query_id, nro_bloque_fisico_str);
         config_destroy(metadata); string_array_destroy(bloques_array);
         free(path_tag); free(path_metadata); free(path_bloque_fisico);
         return OP_ERROR;
-    }
+    }*/
     
     // Mapeamos
     void* buffer_bloque = mmap(NULL, superblock_configs.blocksize, PROT_READ, MAP_SHARED, fd, 0);
