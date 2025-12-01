@@ -48,8 +48,8 @@ void* gestionar_conexion_worker(void* arg) {
             total_actual = cantidad_workers_conectados;
             pthread_mutex_unlock(&mutex_conteo_workers);
 
-            // Logueamos la desconexion
             log_info(logger_storage, "## Se desconecta el Worker %d Cantidad de Workers: %d", worker_id, total_actual);
+            break; // no seguir usando un paquete nulo
         }
 
         t_codigo_operacion op_respuesta = OP_OK; 
