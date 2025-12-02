@@ -253,15 +253,10 @@ void escribir_en_memoria(int query_id, const char* file, const char* tag, int di
     log_info(logger_worker, "Query %d: Se asigna el Marco: %d a la Página: %d perteneciente al File: %s Tag: %s",
              query_id, marco, num_pagina, file, tag);
 
-/*    // 5. Enviar WRITE al Storage para validar y persistir el cambio
-    t_op_storage* op_write = calloc(1, sizeof(t_op_storage));
-    op_write->query_id = query_id;
-    op_write->nombre_file = strdup(file);
-    op_write->nombre_tag  = strdup(tag);
-    op_write->direccion_base = direccion_logica;
-    op_write->contenido = strdup(contenido);
-
-    enviar_op_simple_storage(socket_storage, socket_master, WRITE, op_write);*/
+    t_codigo_operacion write_rta = enviar_op_simple_storage(socket_storage, socket_master, WRITE, op_write);
+    if (write_rta != OP_OK) {
+        log_error(logger_worker, "## Query %d: Error en WRITE a Storage (op_code: %d)", query_id, write_rta);
+    }
 }
 
 char* leer_de_memoria(int query_id, const char* file, const char* tag, int direccion_logica, int tamanio, int socket_storage, int socket_master) {
