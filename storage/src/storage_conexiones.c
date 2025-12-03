@@ -82,7 +82,7 @@ void* gestionar_conexion_worker(void* arg) {
             
             case WRITE:
                 op_respuesta = storage_op_write(op_storage);
-                break; // Se enviará OP_OK u OP_ERROR
+                break; // Se enviará OP_OK o un error
 
             case READ: {
                 char* contenido_leido = NULL;
@@ -110,7 +110,7 @@ void* gestionar_conexion_worker(void* arg) {
                     
                 } else {
                     // Hubo un error en storage_op_read,
-                    // 'break' para que se envíe el OP_ERROR
+                    // 'break' para que se envíe el error
                     free(contenido_leido); // (será NULL, pero por las dudas)
                     break; 
                 }
@@ -125,7 +125,7 @@ void* gestionar_conexion_worker(void* arg) {
         destruir_op_storage(op_storage);
         liberar_paquete(paquete); 
 
-        // Enviamos la respuesta (OK o ERROR)
+        // Enviamos la respuesta (OK o un error)
         t_paquete* paquete_respuesta = empaquetar_buffer(op_respuesta, NULL);
         enviar_paquete(socket_worker, paquete_respuesta);
     }

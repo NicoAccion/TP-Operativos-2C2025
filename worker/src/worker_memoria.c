@@ -203,7 +203,7 @@ void escribir_en_memoria(int query_id, const char* file, const char* tag, int di
         op_read_req->tamano = tam_pagina; 
 
         // Traemos el contenido original
-        char* contenido_bloque = enviar_op_read_storage(socket_storage, op_read_req);
+        char* contenido_bloque = enviar_op_read_storage(socket_storage, socket_master, op_read_req);
 
         if (contenido_bloque != NULL) {
             // Copiamos el bloque original al marco
@@ -294,7 +294,7 @@ char* leer_de_memoria(int query_id, const char* file, const char* tag, int direc
         op_read_req->direccion_base = num_pagina; // nro_bloque_logico
         op_read_req->tamano = tam_pagina; 
 
-        char* contenido_bloque = enviar_op_read_storage(socket_storage, op_read_req);
+        char* contenido_bloque = enviar_op_read_storage(socket_storage, socket_master, op_read_req);
 
         if (contenido_bloque == NULL) {
             log_error(logger_worker, "## Query %d: (READ) Page Fault falló. Storage no devolvió datos.", query_id);

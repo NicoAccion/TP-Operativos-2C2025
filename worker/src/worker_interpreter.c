@@ -109,7 +109,7 @@ t_codigo_operacion enviar_op_simple_storage(int socket_storage, int socket_maste
  * @brief Envía una operación READ al Storage y espera un paquete READ_RTA con el contenido.
  * @return El contenido leído (char*), o NULL si falló.
  */
-char* enviar_op_read_storage(int socket_storage, t_op_storage* op) {
+char* enviar_op_read_storage(int socket_storage, int socket_master, t_op_storage* op) {
     t_buffer* buffer = serializar_op_storage(op, READ);
     t_paquete* paquete = empaquetar_buffer(READ, buffer);
     enviar_paquete(socket_storage, paquete);
@@ -123,6 +123,10 @@ char* enviar_op_read_storage(int socket_storage, t_op_storage* op) {
     if (paquete_rta->codigo_operacion != READ_RTA) {
         log_error(logger_worker, "Error del Storage: se esperaba READ_RTA (op_code: %d)", paquete_rta->codigo_operacion);
         liberar_paquete(paquete_rta);
+        t_buffer* buffer_error = serializar_operacion_end("LECTURA O ESCRITURA FUERA DE LIMITE");
+        t_paquete* paquete_error = empaquetar_buffer(END, buffer_error);
+        enviar_paquete(socket_master, paquete_error);
+        error = true;
         return NULL;
     }
     t_op_storage* op_rta = deserializar_op_storage(paquete_rta->buffer, READ_RTA); 
@@ -172,7 +176,6 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
         pthread_mutex_lock(&mutex_flags);
         bool hay_desalojar = desalojar_actual;
         bool hay_desconexion = desconexion_actual;
-        bool hay_error = error;
         pthread_mutex_unlock(&mutex_flags);
 
         if (hay_desalojar) {
@@ -207,21 +210,6 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
             t_paquete* paquete = empaquetar_buffer(END, buffer);
             enviar_paquete(socket_master, paquete);
 
-            pthread_mutex_lock(&mutex_flags);
-            desalojar_actual = false;
-            desconexion_actual = false;
-            error = false;
-            ejecutando_query = false;
-            query_actual_id = 0;
-            query_actual_pc = 0;
-            pthread_mutex_unlock(&mutex_flags);
-
-            fclose(archivo);
-            return;
-        }
-
-        if (hay_error){
-            
             pthread_mutex_lock(&mutex_flags);
             desalojar_actual = false;
             desconexion_actual = false;
@@ -414,7 +402,21 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
             fin = true;
         }
 
-        //esperar_retardo();
+        if (error){
+            
+            pthread_mutex_lock(&mutex_flags);
+            desalojar_actual = false;
+            desconexion_actual = false;
+            error = false;
+            ejecutando_query = false;
+            query_actual_id = 0;
+            query_actual_pc = 0;
+            pthread_mutex_unlock(&mutex_flags);
+
+            fclose(archivo);
+            return;
+        }
+
         log_info(logger_worker, "## Query %d: - Instrucción realizada: %s", query_id, linea_copy);
         free(linea_copy); 
         pc_actual++;

@@ -29,7 +29,7 @@ t_codigo_operacion enviar_op_simple_storage(int socket_storage, int socket_maste
  * con el contenido.
  * @return El contenido leído (char*), o NULL si falló.
  */
-char* enviar_op_read_storage(int socket_storage, t_op_storage* op);
+char* enviar_op_read_storage(int socket_storage, int socket_master, t_op_storage* op);
 
 void ejecutar_query(int query_id, char* path_query, uint32_t program_counter, int socket_master, int socket_storage);
 
