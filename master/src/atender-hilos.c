@@ -226,7 +226,7 @@ void atender_worker(int socket_cliente, t_paquete* paquete) {
             close(worker->socket_cliente);
 
             //Si no tiene query asignada finalizo el worker
-            if (worker->query_asignada == NULL){
+            if (worker->libre == true){
 
                 //Elimino el worker de la lista
                 pthread_mutex_lock(&mutex_workers);
@@ -299,7 +299,7 @@ void atender_worker(int socket_cliente, t_paquete* paquete) {
                     free(motivo);
 
                     worker->libre = true;
-                    worker->query_asignada = NULL;
+                   //worker->query_asignada = NULL;
 
                     //Habilita al planificador
                     if(strcmp(master_configs.algoritmoplanificacion, "FIFO") == 0){
