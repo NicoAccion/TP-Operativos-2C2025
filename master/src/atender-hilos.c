@@ -299,6 +299,7 @@ void atender_worker(int socket_cliente, t_paquete* paquete) {
                     free(motivo);
 
                     worker->libre = true;
+                    worker->query_asignada = NULL;
 
                     //Habilita al planificador
                     if(strcmp(master_configs.algoritmoplanificacion, "FIFO") == 0){

@@ -135,9 +135,9 @@ void guardar_metadata_en_archivo(metadataconfigs* metadata, char* path) {
     char* tamanio_str = string_itoa(metadata->tamanio);
     char* bloques_str = convertir_lista_a_string(metadata->blocks);
 
-    config_set_value(config, "TAMANIO", tamanio_str);
+    config_set_value(config, "TAMAÑO", tamanio_str);
     config_set_value(config, "ESTADO", metadata->estado);
-    config_set_value(config, "BLOQUES", bloques_str);
+    config_set_value(config, "BLOCKS", bloques_str);
 
     // 3. Guardamos la configuración en el archivo. Esto lo crea si no existe.
     config_save_in_file(config, ruta_absoluta);

@@ -237,9 +237,9 @@ t_codigo_operacion storage_op_tag(t_op_storage* op) {
     mkdir(path_logical_blocks_destino, 0777);
 
     // 5. Leer datos del metadata origen
-    char* tamano_str = config_get_string_value(metadata_origen, "TAMANIO");
-    char* bloques_str = config_get_string_value(metadata_origen, "BLOQUES");
-    char** bloques_array = config_get_array_value(metadata_origen, "BLOQUES");
+    char* tamano_str = config_get_string_value(metadata_origen, "TAMAÑO");
+    char* bloques_str = config_get_string_value(metadata_origen, "BLOCKS");
+    char** bloques_array = config_get_array_value(metadata_origen, "BLOCKS");
     int num_bloques = string_array_size(bloques_array);
 
     // 6. Escribir el metadata de Destino (Copia, pero con estado WIP)
