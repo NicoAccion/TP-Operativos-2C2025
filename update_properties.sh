@@ -11,7 +11,7 @@ CLAVE="$1"
 NUEVO_VALOR="$2"
 
 # Directorios donde buscar
-DIRS=(master queries storage query_control)
+DIRS=(master worker storage query_control)
 
 for dir in "${DIRS[@]}"; do
   CONFIG_PATH="$dir/configs"
