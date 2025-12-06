@@ -57,6 +57,7 @@ void* gestionar_conexion_worker(void* arg) {
         t_op_storage* op_storage = deserializar_op_storage(paquete->buffer, paquete->codigo_operacion);
         
         // op_storage->worker_id = worker_id; 
+        usleep(storage_configs.retardooperacion*1000);
 
         switch (paquete->codigo_operacion) {
             
