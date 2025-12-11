@@ -12,10 +12,7 @@ bool directorio_existe(char* path) {
     if (stat(path, &st) == -1) {
         return false;
     }
-
-    // Usamos S_ISDIR() sobre el campo st_mode (¡no d_flags!)
-    // para verificar si es un directorio.
-    return S_ISDIR(st.st_mode); //Valido?
+    return S_ISDIR(st.st_mode); 
 }
 
 t_codigo_operacion storage_op_create(t_op_storage* op) {
@@ -29,12 +26,8 @@ t_codigo_operacion storage_op_create(t_op_storage* op) {
     // 2. Validar preexistencia (Error "File / Tag preexistente")
     if (directorio_existe(path_tag)) {
         log_error(logger_storage, "##%d Error: File/Tag preexistente %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
-        
-        free(path_file);
-        free(path_tag);
-        free(path_metadata);
-        free(path_logical_blocks);
-        return FILE_TAG_PREEXISTENTE; // Devolvemos error
+        free(path_file); free(path_tag); free(path_metadata); free(path_logical_blocks);
+        return FILE_TAG_PREEXISTENTE; 
     }
 
     // 3. Crear las estructuras de directorios
@@ -45,12 +38,8 @@ t_codigo_operacion storage_op_create(t_op_storage* op) {
     // 4. Crear y escribir el metadata.config inicial
     FILE* f_metadata = fopen(path_metadata, "w");
     if (f_metadata == NULL) {
-        log_error(logger_storage, "##%d Error: No se pudo crear metadata.config para %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
-        
-        free(path_file);
-        free(path_tag);
-        free(path_metadata);
-        free(path_logical_blocks);
+        log_error(logger_storage, "##%d Error creando metadata %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
+        free(path_file); free(path_tag); free(path_metadata); free(path_logical_blocks);
         return OP_ERROR;
     }
 
@@ -62,12 +51,7 @@ t_codigo_operacion storage_op_create(t_op_storage* op) {
     // 5. Loguear éxito (Log obligatorio)
     log_info(logger_storage, "##%d File Creado %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
 
-    // 6. Liberar memoria de los paths y devolver OK
-    free(path_file);
-    free(path_tag);
-    free(path_metadata);
-    free(path_logical_blocks);
-    
+    free(path_file); free(path_tag); free(path_metadata); free(path_logical_blocks);
     return OP_OK;
 }
 
@@ -75,8 +59,7 @@ t_codigo_operacion storage_op_truncate(t_op_storage* op) {
     
     // 0. Validar que el tamaño sea múltiplo de BLOCK_SIZE
     if (op->tamano % superblock_configs.blocksize != 0) {
-        log_error(logger_storage, "##%d Error: Tamaño de TRUNCATE (%d) no es múltiplo de BLOCK_SIZE (%d)",
-                  op->query_id, op->tamano, superblock_configs.blocksize);
+        log_error(logger_storage, "##%d Error: Tamaño TRUNCATE (%d) no es múltiplo de BLOCK_SIZE", op->query_id, op->tamano);
         return LECTURA_O_ESCRITURA_FUERA_DE_LIMITE;
     }
 
@@ -91,22 +74,21 @@ t_codigo_operacion storage_op_truncate(t_op_storage* op) {
     // 2. Abrir y leer metadata
     t_config* metadata = config_create(path_metadata);
     if (metadata == NULL) {
-        log_error(logger_storage, "##%d Error: No se encontró metadata para %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
+        log_error(logger_storage, "##%d Error: Metadata no encontrada %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
         free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
-        return FILE_TAG_INEXISTENTE; // Error: File / Tag inexistente
+        return FILE_TAG_INEXISTENTE; 
     }
 
     // 3. Chequear estado "COMMITED" 
     char* estado = config_get_string_value(metadata, "ESTADO");
     if (strcmp(estado, "COMMITED") == 0) {
-        log_error(logger_storage, "##%d Error: No se puede truncar un File:Tag en estado COMMITED", op->query_id);
+        log_error(logger_storage, "##%d Error: TRUNCATE no permitido en COMMITED", op->query_id);
         config_destroy(metadata);
         free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
-        return ESCRITURA_NO_PERMITIDA; // Error: Escritura no permitida
+        return ESCRITURA_NO_PERMITIDA; 
     }
 
     // 4. Calcular bloques
-    // int tamano_actual = config_get_int_value(metadata, "TAMAÑO"); // No lo usamos, pero es útil saberlo
     char** bloques_actuales_array = config_get_array_value(metadata, "BLOCKS");
     int bloques_actuales_count = string_array_size(bloques_actuales_array);
     int bloques_nuevos_count = op->tamano / superblock_configs.blocksize;
@@ -151,22 +133,17 @@ t_codigo_operacion storage_op_truncate(t_op_storage* op) {
                           op->query_id, op->nombre_file, op->nombre_tag, i, nro_bloque_fisico_str);
             }
 
-            // --- Lógica de Bitmap ---
+            // --- Lógica de liberación de bloque físico ---
             struct stat st;
             if (stat(path_bloque_fisico, &st) == 0) {
-                // Si nlink == 1, solo queda la referencia en /physical_blocks
-                // y podemos liberar el bloque (excepto el bloque 0).
+                // Si nlink == 1 y NO es el bloque 0, liberar
                 if (st.st_nlink == 1 && atoi(nro_bloque_fisico_str) != 0) {
                     int bloque_a_liberar = atoi(nro_bloque_fisico_str);
                     liberar_bloque(bloque_a_liberar);       
                     log_info(logger_storage, "##%d Bloque Físico Liberado %d", op->query_id, bloque_a_liberar);
-
                 }
             }
-            
-            free(nombre_logico);
-            free(path_bloque_logico);
-            free(path_bloque_fisico);
+            free(nombre_logico); free(path_bloque_logico); free(path_bloque_fisico);
         }
     }
 
@@ -176,21 +153,14 @@ t_codigo_operacion storage_op_truncate(t_op_storage* op) {
 
     config_set_value(metadata, "TAMAÑO", tamano_str);
     config_set_value(metadata, "BLOCKS", nuevo_array_str);
-    
     config_save(metadata);
     
-    log_info(logger_storage, "##%d File Truncado %s:%s Tamaño: %d", 
-             op->query_id, op->nombre_file, op->nombre_tag, op->tamano);
+    log_info(logger_storage, "##%d File Truncado %s:%s Tamaño: %d", op->query_id, op->nombre_file, op->nombre_tag, op->tamano);
     
-    // 7. Liberar todo
-    free(tamano_str);
-    free(nuevo_array_str);
-    free(path_bloque_fisico_0);
+    free(tamano_str); free(nuevo_array_str); free(path_bloque_fisico_0);
     string_array_destroy(bloques_actuales_array);
     config_destroy(metadata);
-    free(path_tag); 
-    free(path_metadata); 
-    free(path_logical_blocks_dir);
+    free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
     
     return OP_OK;
 }
@@ -242,13 +212,10 @@ t_codigo_operacion storage_op_tag(t_op_storage* op) {
     char** bloques_array = config_get_array_value(metadata_origen, "BLOCKS");
     int num_bloques = string_array_size(bloques_array);
 
-    // 6. Escribir el metadata de Destino (Copia, pero con estado WIP)
     FILE* f_metadata_destino = fopen(path_metadata_destino, "w");
     if (f_metadata_destino == NULL) {
-        log_error(logger_storage, "##%d Error: No se pudo crear metadata.config para %s:%s", op->query_id, op->nombre_file_destino, op->nombre_tag_destino);
-        // ... (Faltaría cleanup de directorios creados) ...
-        config_destroy(metadata_origen);
-        string_array_destroy(bloques_array);
+        log_error(logger_storage, "##%d Error creando metadata destino", op->query_id);
+        config_destroy(metadata_origen); string_array_destroy(bloques_array);
         free(path_tag_origen); free(path_metadata_origen); free(path_file_destino);
         free(path_tag_destino); free(path_metadata_destino); free(path_logical_blocks_destino);
         return ESPACIO_INSUFICIENTE;
@@ -275,9 +242,7 @@ t_codigo_operacion storage_op_tag(t_op_storage* op) {
                      op->query_id, op->nombre_file_destino, op->nombre_tag_destino, i, nro_bloque_fisico_str);
         }
         
-        free(nombre_logico_destino);
-        free(path_bloque_logico_destino);
-        free(path_bloque_fisico);
+        free(nombre_logico_destino); free(path_bloque_logico_destino); free(path_bloque_fisico);
     }
 
     // 8. Loguear éxito y liberar memoria
@@ -307,14 +272,10 @@ t_codigo_operacion storage_op_delete(t_op_storage* op) {
     if (metadata == NULL) {
         log_error(logger_storage, "##%d Error: No se encontró File/Tag %s:%s para eliminar", op->query_id, op->nombre_file, op->nombre_tag);
         free(path_file); free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
-        return FILE_TAG_INEXISTENTE; // Error: File / Tag inexistente
+        return FILE_TAG_INEXISTENTE; 
     }
-    
-    // (chequear si está COMMITED?? se debe hacer
-    // char* estado = config_get_string_value(metadata, "ESTADO");
-    // if (strcmp(estado, "COMMITED") == 0) { ... }
 
-    // 3. Iterar y eliminar hard links + chequear bloques físicos
+    // 3. Eliminar Links y Chequear Físicos
     char** bloques_array = config_get_array_value(metadata, "BLOCKS");
     int num_bloques = string_array_size(bloques_array);
 
@@ -334,22 +295,16 @@ t_codigo_operacion storage_op_delete(t_op_storage* op) {
                       op->query_id, op->nombre_file, op->nombre_tag, i, nro_bloque_fisico_str);
         }
 
-        // 3.b. Chequear 'nlink' del bloque físico
         struct stat st;
         if (stat(path_bloque_fisico, &st) == 0) {
-            // Si nlink == 1, solo queda la referencia en /physical_blocks
-            // y podemos liberar el bloque (excepto el bloque 0).
+            // Liberar si nlink == 1 y no es bloque 0
             if (st.st_nlink == 1 && atoi(nro_bloque_fisico_str) != 0) {
                 log_info(logger_storage, "Bloque físico %s ya no está referenciado. Liberando...", nro_bloque_fisico_str);
                 liberar_bloque(atoi(nro_bloque_fisico_str));            
-                
                 log_info(logger_storage, "##%d Bloque Físico Liberado %s", op->query_id, nro_bloque_fisico_str);
             }
         }
-        
-        free(nombre_logico);
-        free(path_bloque_logico);
-        free(path_bloque_fisico);
+        free(nombre_logico); free(path_bloque_logico); free(path_bloque_fisico);
     }
 
     // 4. Eliminar los archivos y directorios
@@ -360,31 +315,23 @@ t_codigo_operacion storage_op_delete(t_op_storage* op) {
     rmdir(path_logical_blocks_dir); // Borra /logical_blocks (debe estar vacío)
     rmdir(path_tag); // Borra /TAG (debe estar vacío)
 
-    // 5. (Opcional) Borrar el directorio del FILE si queda vacío
+    // Opcional: Borrar dir del File si está vacío
     DIR* dir = opendir(path_file);
-    struct dirent* entry;
-    int files_count = 0;
-    while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) {
-            files_count++;
+    if (dir) {
+        struct dirent* entry;
+        int files_count = 0;
+        while ((entry = readdir(dir)) != NULL) {
+            if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0) files_count++;
+        }
+        closedir(dir);
+        if (files_count == 0) {
+            rmdir(path_file);
+            log_info(logger_storage, "Directorio de File %s eliminado (estaba vacío)", op->nombre_file);
         }
     }
-    closedir(dir);
-
-    if (files_count == 0) {
-        log_info(logger_storage, "Directorio de File %s quedó vacío. Eliminando...", op->nombre_file);
-        rmdir(path_file);
-    }
-
     // 6. Loguear éxito y liberar
-    log_info(logger_storage, "##%d Tag Eliminado %s:%s", 
-             op->query_id, op->nombre_file, op->nombre_tag);
-    
-    free(path_file); 
-    free(path_tag); 
-    free(path_metadata); 
-    free(path_logical_blocks_dir);
-    
+    log_info(logger_storage, "##%d Tag Eliminado %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
+    free(path_file); free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
     return OP_OK;
 }
 
@@ -401,7 +348,7 @@ t_codigo_operacion storage_op_commit(t_op_storage* op) {
     // 2. Abrir metadata
     t_config* metadata = config_create(path_metadata);
     if (metadata == NULL) {
-        log_error(logger_storage, "##%d Error: No se encontró metadata para %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
+        log_error(logger_storage, "##%d Error COMMIT: Metadata no encontrada", op->query_id);
         free(path_tag); free(path_metadata); free(path_logical_blocks_dir); free(path_hash_index);
         return FILE_TAG_INEXISTENTE; 
     }
@@ -429,7 +376,7 @@ t_codigo_operacion storage_op_commit(t_op_storage* op) {
     bool metadata_modificado = false; // Flag para saber si debemos guardar
 
     for (int i = 0; i < num_bloques; i++) {
-        char* nro_bloque_fisico_actual_str = bloques_array[i]; // 
+        char* nro_bloque_fisico_actual_str = bloques_array[i];
         char* nombre_bloque_fisico_actual = string_from_format("block%04d", atoi(nro_bloque_fisico_actual_str));
         char* path_bloque_fisico_actual = string_from_format("%s/physical_blocks/%s.dat", 
                                                             storage_configs.puntomontaje,
@@ -492,9 +439,7 @@ t_codigo_operacion storage_op_commit(t_op_storage* op) {
             config_set_value(hash_index_config, hash_actual, nombre_bloque_fisico_actual);
         }
         
-        free(nombre_bloque_fisico_actual);
-        free(path_bloque_fisico_actual);
-        free(hash_actual);
+        free(nombre_bloque_fisico_actual); free(path_bloque_fisico_actual); free(hash_actual);
     }
     
     // 5. Guardar cambios en hash_index_config
@@ -503,16 +448,11 @@ t_codigo_operacion storage_op_commit(t_op_storage* op) {
 
     // 6. Actualizar y guardar metadata
     config_set_value(metadata, "ESTADO", "COMMITED"); 
-    
     if(metadata_modificado) {
-        // Solo re-escribimos el array BLOCKS si hubo deduplicación
         char* nuevo_blocks_config_str = array_to_blocks_string(bloques_array, num_bloques);
-        
         config_set_value(metadata, "BLOCKS", nuevo_blocks_config_str);
-        
         free(nuevo_blocks_config_str);
     }
-    
     config_save(metadata);
     
     log_info(logger_storage, "##%d Commit de File: Tag %s:%s", 
@@ -530,118 +470,149 @@ t_codigo_operacion storage_op_commit(t_op_storage* op) {
 }
 
 t_codigo_operacion storage_op_write(t_op_storage* op) {
+    // Bloque lógico inicial donde empezamos a escribir
+    int nro_bloque_logico_inicial = op->direccion_base; 
     
-    //int nro_bloque_logico = op->direccion_base / superblock_configs.blocksize;
-    int nro_bloque_logico = op->direccion_base; 
-    // 1. Armar paths
-    char* path_tag = string_from_format("%s/files/%s/%s", 
-                                      storage_configs.puntomontaje, op->nombre_file, op->nombre_tag);
+    // 1. Armado de paths básicos
+    char* path_tag = string_from_format("%s/files/%s/%s", storage_configs.puntomontaje, op->nombre_file, op->nombre_tag);
     char* path_metadata = string_from_format("%s/metadata.config", path_tag);
     char* path_logical_blocks_dir = string_from_format("%s/logical_blocks", path_tag);
-    char* path_bloque_logico = string_from_format("%s/%06d.dat", path_logical_blocks_dir, nro_bloque_logico);
 
-    // 2. Abrir metadata y validar
+    // 2. Abrir metadata y validaciones iniciales
     t_config* metadata = config_create(path_metadata);
     if (metadata == NULL) {
-        log_error(logger_storage, "##%d WRITE Error: No se encontró metadata para %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
-        free(path_tag); free(path_metadata); free(path_logical_blocks_dir); free(path_bloque_logico);
-        return FILE_TAG_INEXISTENTE; // Error: File / Tag inexistente
+        log_error(logger_storage, "##%d Error WRITE: Metadata no existe %s:%s", op->query_id, op->nombre_file, op->nombre_tag);
+        free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
+        return FILE_TAG_INEXISTENTE; 
     }
 
-    // 3. Chequear estado "COMMITED"
     char* estado = config_get_string_value(metadata, "ESTADO");
     if (strcmp(estado, "COMMITED") == 0) {
         log_error(logger_storage, "##%d WRITE Error: No se puede escribir en un File:Tag COMMITED", op->query_id);
         config_destroy(metadata);
-        free(path_tag); free(path_metadata); free(path_logical_blocks_dir); free(path_bloque_logico);
-        return ESCRITURA_NO_PERMITIDA; // Error: Escritura no permitida
+        free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
+        return ESCRITURA_NO_PERMITIDA; 
     }
     
-    // 4. Chequear fuera de límite
     char** bloques_array = config_get_array_value(metadata, "BLOCKS");
-    int num_bloques = string_array_size(bloques_array);
+    int num_bloques_total = string_array_size(bloques_array);
 
-    if (nro_bloque_logico >= num_bloques) {
-        log_error(logger_storage, "##%d WRITE Error: Bloque lógico %d fuera de límite (Tamaño: %d bloques)", op->query_id, nro_bloque_logico, num_bloques);
-        config_destroy(metadata);
-        string_array_destroy(bloques_array);
-        free(path_tag); free(path_metadata); free(path_logical_blocks_dir); free(path_bloque_logico);
-        return LECTURA_O_ESCRITURA_FUERA_DE_LIMITE; // Error: Lectura o escritura fuera de limite
-    }
+    // 3. Variables para el bucle de escritura
+    int bytes_escritos = 0;
+    int bytes_totales = op->tamano_contenido;
+    int bloque_logico_actual = nro_bloque_logico_inicial;
+
+    // Validamos que tengamos espacio suficiente asignado (TRUNCATE previo)
+    // Calculamos cuántos bloques necesitamos tocar
+    int bloques_necesarios = (bytes_totales + superblock_configs.blocksize - 1) / superblock_configs.blocksize;
     
-    // 5. Lógica Copy-on-Write (CoW)
-    char* nro_bloque_fisico_actual_str = bloques_array[nro_bloque_logico];
-    char* path_bloque_fisico_actual = string_from_format("%s/physical_blocks/block%04d.dat", 
-                                                        storage_configs.puntomontaje, 
-                                                        atoi(nro_bloque_fisico_actual_str));
-    struct stat st;
-    stat(path_bloque_fisico_actual, &st);
+    if (bloque_logico_actual + bloques_necesarios > num_bloques_total) {
+        log_error(logger_storage, "##%d Error WRITE: Se intenta escribir fuera del tamaño del archivo. (Inicio: %d, Req: %d, Disp: %d)", 
+                  op->query_id, bloque_logico_actual, bloques_necesarios, num_bloques_total);
+        config_destroy(metadata); string_array_destroy(bloques_array);
+        free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
+        return LECTURA_O_ESCRITURA_FUERA_DE_LIMITE;
+    }
 
-    // Si nlink > 2 (alguien más lo usa) O si es el bloque 0, necesitamos copiar.
-        if (st.st_nlink > 2 || atoi(nro_bloque_fisico_actual_str) == 0) {
-        log_info(logger_storage, "##%d WRITE (CoW): Bloque físico %s es compartido. Realizando copia.", op->query_id, nro_bloque_fisico_actual_str);
+    // ---------------------------------------------------------
+    // 4. BUCLE DE ESCRITURA MULTI-BLOQUE
+    // ---------------------------------------------------------
+    while (bytes_escritos < bytes_totales) {
+        
+        // Calculamos cuánto escribir en ESTE bloque (máximo BLOCK_SIZE)
+        int bytes_restantes = bytes_totales - bytes_escritos;
+        int bytes_a_escribir_ahora = (bytes_restantes < superblock_configs.blocksize) ? bytes_restantes : superblock_configs.blocksize;
 
-        // a. Encontrar bloque nuevo (REAL - Usando Bitmap)
-        
-        int nuevo_nro_bloque_fisico = reservar_bloque_real(op->query_id);
-        
-        if (nuevo_nro_bloque_fisico == -1) { 
-            // Si no hay bloques, limpiamos y devolvemos error
-            log_error(logger_storage, "##%d Fallo CoW: No hay espacio para copiar bloque.", op->query_id);
-            string_array_destroy(bloques_array);
-            config_destroy(metadata);
-            free(path_tag); free(path_metadata); free(path_logical_blocks_dir); 
-            free(path_bloque_logico); free(path_bloque_fisico_actual);
-            return ESPACIO_INSUFICIENTE; 
-        }
-        
-        char* path_nuevo_bloque_fisico = string_from_format("%s/physical_blocks/block%04d.dat", 
+        // Puntero al pedazo de contenido actual
+        void* contenido_actual = op->contenido + bytes_escritos;
+
+        // Path del bloque lógico actual
+        char* path_bloque_logico = string_from_format("%s/%06d.dat", path_logical_blocks_dir, bloque_logico_actual);
+
+        // Obtenemos el físico actual del array en memoria
+        char* nro_bloque_fisico_actual_str = bloques_array[bloque_logico_actual];
+        int nro_bloque_fisico_actual = atoi(nro_bloque_fisico_actual_str);
+
+        char* path_bloque_fisico_actual = string_from_format("%s/physical_blocks/block%04d.dat", 
                                                             storage_configs.puntomontaje, 
-                                                            nuevo_nro_bloque_fisico);
+                                                            nro_bloque_fisico_actual);
         
-        // b. Escribir contenido en el *nuevo* bloque
-        escribir_en_bloque_fisico(path_nuevo_bloque_fisico, op->contenido, op->tamano_contenido, superblock_configs.blocksize);
+        // Verificamos nlink para Copy-On-Write
+        struct stat st;
+        stat(path_bloque_fisico_actual, &st);
 
-        // c. Actualizar hard link
-        unlink(path_bloque_logico); // Borrar link al bloque viejo
-        link(path_nuevo_bloque_fisico, path_bloque_logico); // Crear link al bloque nuevo
-        
-        // d. Actualizar metadata
-        free(bloques_array[nro_bloque_logico]);
-        bloques_array[nro_bloque_logico] = string_itoa(nuevo_nro_bloque_fisico);
-        
-        char* nuevo_blocks_config_str = array_to_blocks_string(bloques_array, num_bloques);
-        config_set_value(metadata, "BLOCKS", nuevo_blocks_config_str);
-        config_save(metadata);
-        
-        free(nuevo_blocks_config_str);
-        free(path_nuevo_bloque_fisico);
+        // CASO A: COPY-ON-WRITE (Bloque compartido o Bloque 0)
+        if (st.st_nlink > 2 || nro_bloque_fisico_actual == 0) {
+            log_info(logger_storage, "##%d WRITE (CoW): Bloque Lógico %d apunta a Físico %d (compartido). Separando...", 
+                     op->query_id, bloque_logico_actual, nro_bloque_fisico_actual);
 
-        // e. Chequear si el bloque viejo quedó libre
-        chequear_y_liberar_bloque_fisico(op->query_id, nro_bloque_fisico_actual_str);
-    
-    } else {
-        // --- Escribir directo ---
-        // nlink == 2 (solo /physical_blocks y este /logical_blocks) y no es bloque 0
-        log_info(logger_storage, "##%d WRITE: Escribiendo directo en bloque físico %s", op->query_id, nro_bloque_fisico_actual_str);
-        escribir_en_bloque_fisico(path_bloque_fisico_actual, op->contenido, op->tamano_contenido, superblock_configs.blocksize);
+            int nuevo_nro_bloque_fisico = reservar_bloque_real(op->query_id);
+            
+            if (nuevo_nro_bloque_fisico == -1) { 
+                // Fallo crítico: Limpieza y retorno
+                free(path_bloque_logico); free(path_bloque_fisico_actual);
+                string_array_destroy(bloques_array); config_destroy(metadata);
+                free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
+                return ESPACIO_INSUFICIENTE; 
+            }
+            
+            char* path_nuevo_bloque_fisico = string_from_format("%s/physical_blocks/block%04d.dat", 
+                                                                storage_configs.puntomontaje, 
+                                                                nuevo_nro_bloque_fisico);
+            
+            // Escribimos en el NUEVO bloque
+            escribir_en_bloque_fisico(path_nuevo_bloque_fisico, contenido_actual, bytes_a_escribir_ahora, superblock_configs.blocksize);
+
+            // Actualizamos Hard Link
+            unlink(path_bloque_logico); 
+            link(path_nuevo_bloque_fisico, path_bloque_logico); 
+            
+            // Actualizamos el Array en memoria (Importante para la metadata final)
+            free(bloques_array[bloque_logico_actual]);
+            bloques_array[bloque_logico_actual] = string_itoa(nuevo_nro_bloque_fisico);
+
+            // Liberamos referencia al viejo si corresponde
+            chequear_y_liberar_bloque_fisico(op->query_id, nro_bloque_fisico_actual_str);
+            
+            free(path_nuevo_bloque_fisico);
+            
+        } 
+        // CASO B: ESCRITURA DIRECTA (bloque no compartido)
+        else {
+            log_info(logger_storage, "##%d WRITE: Escribiendo directo en Bloque Lógico %d (Físico %d)", 
+                     op->query_id, bloque_logico_actual, nro_bloque_fisico_actual);
+            
+            escribir_en_bloque_fisico(path_bloque_fisico_actual, contenido_actual, bytes_a_escribir_ahora, superblock_configs.blocksize);
+        }
+
+        log_info(logger_storage, "##%d Bloque Lógico Escrito %s:%s Número de Bloque: %d", 
+             op->query_id, op->nombre_file, op->nombre_tag, bloque_logico_actual);
+
+        // Limpieza de iteración
+        free(path_bloque_logico);
+        free(path_bloque_fisico_actual);
+
+        // Avanzamos contadores
+        bytes_escritos += bytes_a_escribir_ahora;
+        bloque_logico_actual++;
     }
+    // ---------------------------------------------------------
 
-    log_info(logger_storage, "##%d Bloque Lógico Escrito %s:%s Número de Bloque: %d", 
-             op->query_id, op->nombre_file, op->nombre_tag, nro_bloque_logico);
-
-    // 6. Liberar
+    // 5. Guardar Metadata Actualizada (Una sola vez al final)
+    char* nuevo_blocks_config_str = array_to_blocks_string(bloques_array, num_bloques_total);
+    config_set_value(metadata, "BLOCKS", nuevo_blocks_config_str);
+    config_save(metadata);
+    
+    // 6. Liberación Final
+    free(nuevo_blocks_config_str);
     string_array_destroy(bloques_array);
     config_destroy(metadata);
-    free(path_tag); free(path_metadata); free(path_logical_blocks_dir); 
-    free(path_bloque_logico); free(path_bloque_fisico_actual);
+    free(path_tag); free(path_metadata); free(path_logical_blocks_dir);
     
     return OP_OK;
 }
 
 t_codigo_operacion storage_op_read(t_op_storage* op, char** contenido_leido) {
-    
-    // Asumimos que `direccion_base` es el `nro_bloque_logico`
     int nro_bloque_logico = op->direccion_base; 
 
     // 1. Armar paths
@@ -678,15 +649,8 @@ t_codigo_operacion storage_op_read(t_op_storage* op, char** contenido_leido) {
     usleep(storage_configs.retardoaccesobloque * 1000);
 
     int fd = open(path_bloque_fisico, O_RDONLY);
-/*    if (fd == -1) {
-        log_error(logger_storage, "##%d READ Error: No se pudo abrir bloque físico %s", op->query_id, nro_bloque_fisico_str);
-        config_destroy(metadata); string_array_destroy(bloques_array);
-        free(path_tag); free(path_metadata); free(path_bloque_fisico);
-        return OP_ERROR;
-    }*/
-    
-    // Mapeamos
     void* buffer_bloque = mmap(NULL, superblock_configs.blocksize, PROT_READ, MAP_SHARED, fd, 0);
+    
     if (buffer_bloque == MAP_FAILED) {
         log_error(logger_storage, "##%d READ Error: mmap falló para bloque %s", op->query_id, nro_bloque_fisico_str);
         close(fd);
@@ -698,7 +662,7 @@ t_codigo_operacion storage_op_read(t_op_storage* op, char** contenido_leido) {
     // 5. Copiar contenido al out-parameter
     *contenido_leido = malloc(superblock_configs.blocksize + 1);
     memcpy(*contenido_leido, buffer_bloque, superblock_configs.blocksize);
-    (*contenido_leido)[superblock_configs.blocksize] = '\0'; // Aseguramos null-terminator
+    (*contenido_leido)[superblock_configs.blocksize] = '\0'; 
 
     // 6. Liberar y loguear
     munmap(buffer_bloque, superblock_configs.blocksize);
@@ -707,8 +671,7 @@ t_codigo_operacion storage_op_read(t_op_storage* op, char** contenido_leido) {
     log_info(logger_storage, "##%d Bloque Lógico Leído %s:%s Número de Bloque: %d", 
              op->query_id, op->nombre_file, op->nombre_tag, nro_bloque_logico);
     
-    config_destroy(metadata);
-    string_array_destroy(bloques_array);
+    config_destroy(metadata); string_array_destroy(bloques_array);
     free(path_tag); free(path_metadata); free(path_bloque_fisico);
     
     return OP_OK;
@@ -719,7 +682,6 @@ t_codigo_operacion storage_op_read(t_op_storage* op, char** contenido_leido) {
 char* build_blocks_string(char** bloques_actuales, int count_actual, int count_nuevo) {
     char* nuevo_array_str = string_new();
     string_append(&nuevo_array_str, "[");
-
     for (int i = 0; i < count_nuevo; i++) {
         if (i < count_actual) {
             // Copia el bloque existente
@@ -728,10 +690,7 @@ char* build_blocks_string(char** bloques_actuales, int count_actual, int count_n
             // Agrega el nuevo bloque (apuntando a 0) 
             string_append(&nuevo_array_str, "0");
         }
-        
-        if (i < count_nuevo - 1) {
-            string_append(&nuevo_array_str, ",");
-        }
+        if (i < count_nuevo - 1) string_append(&nuevo_array_str, ",");
     }
     string_append(&nuevo_array_str, "]");
     return nuevo_array_str;
@@ -742,11 +701,10 @@ char* build_blocks_string(char** bloques_actuales, int count_actual, int count_n
  */
 void chequear_y_liberar_bloque_fisico(int query_id, char* nro_bloque_fisico_str) {
     int nro_bloque_fisico = atoi(nro_bloque_fisico_str);
-    if (nro_bloque_fisico == 0) return; // Nunca liberar el bloque 0?
+    if (nro_bloque_fisico == 0) return; 
 
     char* path_bloque_fisico = string_from_format("%s/physical_blocks/block%04d.dat", 
-                                                 storage_configs.puntomontaje, 
-                                                 nro_bloque_fisico);
+                                                 storage_configs.puntomontaje, nro_bloque_fisico);
     struct stat st;
     if (stat(path_bloque_fisico, &st) == 0) {
         // nlink == 1 significa que solo existe el archivo en /physical_blocks
@@ -754,7 +712,6 @@ void chequear_y_liberar_bloque_fisico(int query_id, char* nro_bloque_fisico_str)
             log_info(logger_storage, "Bloque físico %d ya no está referenciado. Liberando...", nro_bloque_fisico);
         
             liberar_bloque(nro_bloque_fisico);
-
             log_info(logger_storage, "##%d Bloque Físico Liberado %d", query_id, nro_bloque_fisico);
         }
     }
@@ -769,49 +726,15 @@ void chequear_y_liberar_bloque_fisico(int query_id, char* nro_bloque_fisico_str)
 char* array_to_blocks_string(char** bloques_array, int count) {
     char* nuevo_array_str = string_new();
     string_append(&nuevo_array_str, "[");
-
     for (int i = 0; i < count; i++) {
         string_append(&nuevo_array_str, bloques_array[i]);
-        if (i < count - 1) {
-            string_append(&nuevo_array_str, ",");
-        }
+        if (i < count - 1) string_append(&nuevo_array_str, ",");
     }
     string_append(&nuevo_array_str, "]");
     return nuevo_array_str;
 }
 
-/*// --- SIMULACIÓN DE BITMAP ---
-// Esto simula encontrar un bloque libre. Empieza en 1 (0 es 'initial_file').
-static int mock_next_free_block = 1;
-
-int encontrar_bloque_libre_mock(int query_id) {
-    int nuevo_nro_bloque = mock_next_free_block;
-    mock_next_free_block++;
-
-    char* path_nuevo_bloque = string_from_format("%s/physical_blocks/block%04d.dat", 
-                                                storage_configs.puntomontaje, 
-                                                nuevo_nro_bloque);
-
-    // Creamos el archivo físico vacío
-    int fd = open(path_nuevo_bloque, O_RDWR | O_CREAT, 0666);
-    if (fd == -1) {
-        log_error(logger_storage, "##%d Mock-Bitmap: Error al crear archivo para bloque físico %d", query_id, nuevo_nro_bloque);
-        free(path_nuevo_bloque);
-        return -1; // Error
-    }
-    
-    // Lo "llenamos" con ceros (o cualquier placeholder)
-    ftruncate(fd, superblock_configs.blocksize);
-    close(fd);
-
-    log_info(logger_storage, "##%d Bloque Físico Reservado %d (Simulación)", query_id, nuevo_nro_bloque);
-    free(path_nuevo_bloque);
-    return nuevo_nro_bloque;
-}*/
-
-// --- Helper para escribir en un bloque físico ---
 void escribir_en_bloque_fisico(char* path_bloque_fisico, void* contenido, int tamano_contenido, int block_size) {
-
     usleep(storage_configs.retardoaccesobloque * 1000);
 
     int fd = open(path_bloque_fisico, O_RDWR);
@@ -821,11 +744,7 @@ void escribir_en_bloque_fisico(char* path_bloque_fisico, void* contenido, int ta
     }
     
     void* buffer_bloque = mmap(NULL, block_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (buffer_bloque == MAP_FAILED) {
-        log_error(logger_storage, "WRITE_HELPER: mmap falló");
-        close(fd);
-        return;
-    }
+    if (buffer_bloque == MAP_FAILED) { close(fd); return; }
 
     // Usamos el tamaño que nos pasan, validando que no se pase del block_size
     int bytes_a_copiar = (tamano_contenido < block_size) ? tamano_contenido : block_size;
@@ -839,24 +758,21 @@ void escribir_en_bloque_fisico(char* path_bloque_fisico, void* contenido, int ta
 }
 
 int reservar_bloque_real(int query_id) {
-    // 1. Buscar bit libre en el bitarray
-    int bloque_libre = buscar_bloque_libre(); 
+    // Esta función busca Y marca como ocupado en una operación atómica
+    int bloque_libre = reservar_bloque_libre(); 
 
     if (bloque_libre == -1) {
         log_error(logger_storage, "##%d ERROR: File System LLENO. No hay bloques libres.", query_id);
         return -1;
     }
 
-    // 2. Marcar como ocupado en el bitarray y guardar en disco
-    marcar_bloque_ocupado(bloque_libre); 
+    // Ya no hace falta llamar a 'marcar_bloque_ocupado' porque reservar_bloque_libre ya lo hizo.
 
-    // 3. Asegurar que existe el archivo físico (blockXXXX.dat)
+    // 3. Asegurar archivo físico
     char* path_bloque = string_from_format("%s/physical_blocks/block%04d.dat", 
                                           storage_configs.puntomontaje, 
                                           bloque_libre);
     
-    // Lo abrimos con O_CREAT para asegurarnos que exista.
-    // Si ya existía (de una ejecución anterior), no pasa nada, se sobrescribe
     int fd = open(path_bloque, O_RDWR | O_CREAT, 0666);
     if (fd == -1) {
         log_error(logger_storage, "##%d ERROR: No se pudo crear archivo físico para bloque %d", query_id, bloque_libre);

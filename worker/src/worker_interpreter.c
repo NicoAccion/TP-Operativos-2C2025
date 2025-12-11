@@ -281,6 +281,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
                 char* tag_local  = strdup(strtok(NULL, ":"));
                 
                 // LLAMADA A LA MMU 
+                log_info(logger_worker, "DEBUG WRITE: Contenido a escribir: '%s' (Largo: %ld)", contenido, strlen(contenido));
                 escribir_en_memoria(query_id, file_local, tag_local, atoi(direccion), contenido, socket_storage, socket_master);
                 
                 free(file_local);

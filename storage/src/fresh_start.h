@@ -44,4 +44,9 @@ void crear_bloque_logico_como_link(const char* path_tag, int nro_bloque_fisico, 
  */
 void fs_crear_directorio(const char* dir_name);
 
+/**
+ * @brief Borra todo el contenido del punto de montaje (archivos y directorios).
+ */
+void borrar_datos_existentes();
+
 #endif 

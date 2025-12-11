@@ -176,95 +176,99 @@ static int buscar_pagina_en_memoria(const char* file, const char* tag, int num_p
 }
 
 void escribir_en_memoria(int query_id, const char* file, const char* tag, int direccion_logica, const char* contenido, int socket_storage, int socket_master) {
-    int num_pagina = direccion_logica / tam_pagina;
-    int offset = direccion_logica % tam_pagina;
     
-    // 1. Buscar si la página ya está en memoria
-    int marco = buscar_pagina_en_memoria(file, tag, num_pagina);
-    if (marco == -1) {
-        // --- PAGE FAULT ---
-        log_info(logger_worker, "## Query %d: (WRITE) Memoria Miss - File: %s - Tag: %s Pagina: %d", 
-                 query_id, file, tag, num_pagina);
+    int bytes_totales = strlen(contenido) + 1; // +1 para incluir el \0
+    int bytes_escritos = 0;
+    int dir_logica_actual = direccion_logica;
+
+    // BUCLE PARA ESCRIBIR EN MÚLTIPLES PÁGINAS SI ES NECESARIO
+    while (bytes_escritos < bytes_totales) {
         
-        marco = obtener_marco_libre();
+        int num_pagina = dir_logica_actual / tam_pagina;
+        int offset = dir_logica_actual % tam_pagina;
+        
+        // 1. Buscar si la página ya está en memoria (o traerla)
+        int marco = buscar_pagina_en_memoria(file, tag, num_pagina);
+        
         if (marco == -1) {
-            // Pasamos los datos de la pagina NUEVA que queremos cargar para el log de reemplazo
-            marco = reemplazar_pagina(query_id, socket_storage, socket_master, file, tag, num_pagina);
-        }
-        
-        // Antes de escribir sobre el marco, debemos traer lo que ya existía en disco.
-        log_info(logger_worker, "## Query %d: Solicitando bloque %d de %s:%s a Storage (para Write)", query_id, num_pagina, file, tag);
-        
-        t_op_storage* op_read_req = calloc(1, sizeof(t_op_storage));
-        op_read_req->query_id = query_id;
-        op_read_req->nombre_file = strdup(file);
-        op_read_req->nombre_tag  = strdup(tag);
-        op_read_req->direccion_base = num_pagina;
-        op_read_req->tamano = tam_pagina; 
+            // --- PAGE FAULT ---
+            log_info(logger_worker, "## Query %d: (WRITE) Memoria Miss - File: %s - Tag: %s Pagina: %d", 
+                    query_id, file, tag, num_pagina);
+            
+            marco = obtener_marco_libre();
+            if (marco == -1) {
+                marco = reemplazar_pagina(query_id, socket_storage, socket_master, file, tag, num_pagina);
+            }
+            
+            // Traer contenido original de Storage (para no romper el resto de la página)
+            t_op_storage* op_read_req = calloc(1, sizeof(t_op_storage));
+            op_read_req->query_id = query_id;
+            op_read_req->nombre_file = strdup(file);
+            op_read_req->nombre_tag  = strdup(tag);
+            op_read_req->direccion_base = num_pagina;
+            op_read_req->tamano = tam_pagina; 
 
-        // Traemos el contenido original
-        char* contenido_bloque = enviar_op_read_storage(socket_storage, socket_master, op_read_req);
+            char* contenido_bloque = enviar_op_read_storage(socket_storage, socket_master, op_read_req);
 
-        if (contenido_bloque != NULL) {
-            // Copiamos el bloque original al marco
-            memcpy(memoria_principal + (marco * tam_pagina), contenido_bloque, tam_pagina);
-            free(contenido_bloque);
+            if (contenido_bloque != NULL) {
+                memcpy(memoria_principal + (marco * tam_pagina), contenido_bloque, tam_pagina);
+                free(contenido_bloque);
+            } else {
+                memset(memoria_principal + (marco * tam_pagina), 0, tam_pagina);
+            }
+             log_info(logger_worker, "## Query %d: Memoria Add - Pagina: %d Marco: %d", query_id, num_pagina, marco);
         } else {
-            // Si falla (ej: archivo nuevo vacio), llenamos con ceros
-            memset(memoria_principal + (marco * tam_pagina), 0, tam_pagina);
-        }
+             log_info(logger_worker, "## Query %d: (WRITE) Memoria Hit - Pagina: %d Marco: %d", query_id, num_pagina, marco);
+        }    
 
-        log_info(logger_worker, "## Query %d: Memoria Add - File: %s - Tag: %s Pagina: %d Marco: %d",
-                 query_id, file, tag, num_pagina, marco);
-    } else {
-        log_info(logger_worker, "## Query %d: (WRITE) Memoria Hit - File: %s - Tag: %s Pagina: %d Marco: %d",
-                 query_id, file, tag, num_pagina, marco);
-    }    
+        // 2. Retardo (Simulamos acceso a memoria por cada página tocada)
+        usleep(worker_configs.retardomemoria * 1000);
 
-    // 2. Retardo
-    usleep(worker_configs.retardomemoria * 1000);
+        // 3. Calcular cuánto escribimos EN ESTA página
+        int bytes_disponibles = tam_pagina - offset;
+        int bytes_restantes = bytes_totales - bytes_escritos;
+        
+        // Escribimos lo que quede o lo que entre, lo que sea menor
+        int bytes_a_escribir_ahora = (bytes_restantes < bytes_disponibles) ? bytes_restantes : bytes_disponibles;
 
-    // 3. Escribir el nuevo contenido sobre el marco (respetando offset)
-    int direccion_fisica = (marco * tam_pagina) + offset;
-    
-    // Usamos strlen para el contenido nuevo 
-    // Aseguramos no pasarnos del tamaño de pagina
-    int bytes_disponibles = tam_pagina - offset;
-    int bytes_a_escribir = strlen(contenido) + 1; // +1 para el \0 
-    if (bytes_a_escribir > bytes_disponibles) bytes_a_escribir = bytes_disponibles;
+        // 4. Escribir en RAM
+        int direccion_fisica = (marco * tam_pagina) + offset;
+        void* contenido_actual_ptr = (void*)(contenido + bytes_escritos);
+        
+        memcpy(memoria_principal + direccion_fisica, contenido_actual_ptr, bytes_a_escribir_ahora);
 
-    memcpy(memoria_principal + direccion_fisica, contenido, bytes_a_escribir);
+        // Solo logueamos el contenido parcial para no ensuciar tanto, o el total si entra
+        // log_info(logger_worker, "## Query %d: Escribiendo en DirFisica: %d (%d bytes)", query_id, direccion_fisica, bytes_a_escribir_ahora);
 
-    log_info(logger_worker, "## Query %d: Acción: ESCRIBIR - Dirección Física: %d - Valor: %s",
-             query_id, direccion_fisica, contenido);
+        // 5. Actualizar Metadata de la Página
+        PaginaMemoria* pagina_info = &tabla_de_marcos[marco];
+        pagina_info->ocupado = true;
+        pagina_info->modificado = true; 
+        pagina_info->usado = true;
+        pagina_info->timestamp = (unsigned long long)time(NULL); 
+        pagina_info->num_pagina = num_pagina;
+        strncpy(pagina_info->file, file, MAX_FILETAG - 1);
+        strncpy(pagina_info->tag, tag, MAX_FILETAG - 1);
 
-    // 4. Actualizar Metadata (Bit Modificado = 1)
-    PaginaMemoria* pagina_info = &tabla_de_marcos[marco];
-    pagina_info->ocupado = true;
-    pagina_info->modificado = true; 
-    pagina_info->usado = true;      // Bit de Uso para Clock
-    pagina_info->timestamp = (unsigned long long)time(NULL); 
-    pagina_info->num_pagina = num_pagina;
-    
-    // Actualizamos nombre solo si cambio (aunque si hubo Miss ya esta libre)
-    strncpy(pagina_info->file, file, MAX_FILETAG - 1);
-    strncpy(pagina_info->tag, tag, MAX_FILETAG - 1);
+        log_info(logger_worker, "Query %d: Acción: ESCRIBIR - DirFisica: %d - Pagina: %d", query_id, direccion_fisica, num_pagina);
+        
+        // 6. Write-Through (Enviar inmediatamente al Storage)
+        // OJO: Esto manda UN bloque al storage. Como el Storage ya soporta recibir el bloque
+        // y actualizarlo, esto está bien.
+        t_op_storage* op_write = calloc(1, sizeof(t_op_storage));
+        op_write->query_id = query_id;
+        op_write->nombre_file = strdup(file);
+        op_write->nombre_tag  = strdup(tag);
+        op_write->direccion_base = num_pagina; 
+        op_write->tamano_contenido = tam_pagina;
+        op_write->contenido = malloc(tam_pagina);
+        memcpy(op_write->contenido, memoria_principal + (marco * tam_pagina), tam_pagina);
+        
+        enviar_op_simple_storage(socket_storage, socket_master, WRITE, op_write);
 
-    log_info(logger_worker, "Query %d: Se asigna el Marco: %d a la Página: %d perteneciente al File: %s Tag: %s",
-             query_id, marco, num_pagina, file, tag);
-    
-    t_op_storage* op_write = calloc(1, sizeof(t_op_storage));
-    op_write->query_id = query_id;
-    op_write->nombre_file = strdup(file);
-    op_write->nombre_tag  = strdup(tag);
-    op_write->direccion_base = num_pagina; // bloque lógico (página)
-    op_write->tamano_contenido = tam_pagina;
-    op_write->contenido = malloc(tam_pagina);
-    memcpy(op_write->contenido, memoria_principal + (marco * tam_pagina), tam_pagina);
-    
-    t_codigo_operacion write_rta = enviar_op_simple_storage(socket_storage, socket_master, WRITE, op_write);
-    if (write_rta != OP_OK) {
-        log_error(logger_worker, "## Query %d: Error en WRITE a Storage (op_code: %d)", query_id, write_rta);
+        // 7. Avanzar punteros
+        bytes_escritos += bytes_a_escribir_ahora;
+        dir_logica_actual += bytes_a_escribir_ahora;
     }
 }
 
