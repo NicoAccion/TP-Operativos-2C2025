@@ -164,6 +164,7 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
     char linea[256];
     uint32_t pc_actual = 0;
     bool fin = false;
+    bool enviar_end_al_final = false;
 
     // --- Lógica de Program Counter ---
     // Adelantamos el archivo hasta la línea que nos dijo el Master
@@ -396,10 +397,11 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
         }
         // ==== END ====
         else if (strcmp(instruccion, "END") == 0) {
-            char* motivo = "OK";
+            /*char* motivo = "OK";
             t_buffer* buffer_end = serializar_operacion_end(motivo);
             t_paquete* paquete_end = empaquetar_buffer(END, buffer_end);
-            enviar_paquete(socket_master, paquete_end);
+            enviar_paquete(socket_master, paquete_end);*/
+            enviar_end_al_final = true;
             fin = true;
         }
 
@@ -432,4 +434,11 @@ void ejecutar_query(int query_id, char* path_query, uint32_t program_counter,
     query_actual_id = 0;
     query_actual_pc = 0;
     pthread_mutex_unlock(&mutex_flags);
+
+    if (enviar_end_al_final){
+        char* motivo = "OK";
+        t_buffer* buffer_end = serializar_operacion_end(motivo);
+        t_paquete* paquete_end = empaquetar_buffer(END, buffer_end);
+        enviar_paquete(socket_master, paquete_end);
+    }
 }

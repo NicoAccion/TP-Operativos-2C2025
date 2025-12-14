@@ -177,7 +177,7 @@ static int buscar_pagina_en_memoria(const char* file, const char* tag, int num_p
 
 void escribir_en_memoria(int query_id, const char* file, const char* tag, int direccion_logica, const char* contenido, int socket_storage, int socket_master) {
     
-    int bytes_totales = strlen(contenido) + 1; // +1 para incluir el \0
+    int bytes_totales = strlen(contenido); // +1 para incluir el \0
     int bytes_escritos = 0;
     int dir_logica_actual = direccion_logica;
 
