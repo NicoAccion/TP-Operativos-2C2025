@@ -15,6 +15,7 @@ static PaginaMemoria* tabla_de_marcos;
 static int cantidad_marcos;
 static int tam_pagina;
 static int puntero_clock = 0;
+static unsigned long long contador_lru = 0;
 
 void inicializar_memoria(int tam_mem, int tam_pag) {
     memoria_principal = calloc(1, tam_mem);
@@ -245,7 +246,8 @@ void escribir_en_memoria(int query_id, const char* file, const char* tag, int di
         pagina_info->ocupado = true;
         pagina_info->modificado = true; 
         pagina_info->usado = true;
-        pagina_info->timestamp = (unsigned long long)time(NULL); 
+        //pagina_info->timestamp = (unsigned long long)time(NULL); 
+        pagina_info->timestamp = ++contador_lru;
         pagina_info->num_pagina = num_pagina;
         strncpy(pagina_info->file, file, MAX_FILETAG - 1);
         strncpy(pagina_info->tag, tag, MAX_FILETAG - 1);
@@ -317,7 +319,8 @@ char* leer_de_memoria(int query_id, const char* file, const char* tag, int direc
         pagina_info->ocupado = true;
         pagina_info->modificado = false; // Acaba de ser cargada
         pagina_info->usado = true;       // Se va a usar
-        pagina_info->timestamp = (unsigned long long)time(NULL); // Para LRU
+        //pagina_info->timestamp = (unsigned long long)time(NULL); // Para LRU
+        pagina_info->timestamp = ++contador_lru;
         pagina_info->num_pagina = num_pagina;
         strncpy(pagina_info->file, file, MAX_FILETAG - 1);
         strncpy(pagina_info->tag, tag, MAX_FILETAG - 1);
@@ -329,7 +332,8 @@ char* leer_de_memoria(int query_id, const char* file, const char* tag, int direc
          // Actualizar flags de la página existente
          PaginaMemoria* pagina_info = &tabla_de_marcos[marco];
          pagina_info->usado = true;
-         pagina_info->timestamp = (unsigned long long)time(NULL); // Actualizar para LRU
+         //pagina_info->timestamp = (unsigned long long)time(NULL); // Actualizar para LRU
+         pagina_info->timestamp = ++contador_lru;
     }
 
     // 5. Leer de la memoria (ahora sí está)
