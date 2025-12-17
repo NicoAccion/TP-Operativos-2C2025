@@ -351,6 +351,7 @@ void atender_worker(int socket_cliente, t_paquete* paquete) {
                     
                     
                     //Libero memoria
+                    free(query->archivo_query);
                     free(query);
                     liberar_paquete(paquete);
 
