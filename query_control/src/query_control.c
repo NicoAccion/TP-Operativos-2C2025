@@ -71,7 +71,12 @@ void escuchar_master(int socket_master) {
 
             case END:
                 char* motivo = deserializar_operacion_end(paquete->buffer);
-                log_info(logger_query, "## Query finalizada: %s", motivo);
+                if(strcmp(motivo, "OK") == 0){
+                    log_info(logger_query, "## Query finalizada: %s", motivo);
+                }
+                else{
+                    log_error(logger_query, "## Query finalizada: %s", motivo);
+                }
                 free(motivo);
                 liberar_paquete(paquete);
                 return;
